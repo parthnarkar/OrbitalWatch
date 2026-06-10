@@ -1,6 +1,8 @@
 /**
  * @fileoverview ThreeGlobe.jsx — Full 3D Earth globe with real-time satellite
- * visualisation built on React Three Fiber + Drei.
+ * visualisation built on React Three Fiber + Drei. Upgraded with NASA Blue Marble
+ * texture, rotating clouds, Fresnel atmosphere glow, pulsing selection indicators,
+ * custom procedural fallbacks, and smart camera follow/lock behavior.
  *
  * Architecture:
  *  ┌─ <Canvas> ────────────────────────────────────────────┐
@@ -8,9 +10,6 @@
  *  │    <GlobeScene satellites onSelect selectedNoradId /> │
  *  │  </Suspense>                                          │
  *  └───────────────────────────────────────────────────────┘
- *
- * GlobeScene is kept as a separate inner component so that it can use R3F
- * hooks (useFrame, useThree) which must run inside <Canvas>.
  */
 
 import { Suspense, useRef, useMemo, useCallback, useState, useEffect } from 'react'
@@ -63,15 +62,176 @@ function geoToCartesian(lat, lon, altitudeKm) {
   return [x, y, z]
 }
 
+// ── Procedural Fallbacks ──────────────────────────────────────────────────────
+
+/** Generates a procedural cloud texture if loading from file fails. */
+function createProceduralClouds() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 256
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  // Fill with transparent background
+  ctx.fillStyle = 'rgba(0,0,0,0)'
+  ctx.fillRect(0, 0, 512, 256)
+
+  // Draw soft, organic cloud-like blobs
+  for (let i = 0; i < 20; i++) {
+    const x = Math.random() * 512
+    const y = Math.random() * 256
+    const r = 30 + Math.random() * 50
+    
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
+    grad.addColorStop(0, 'rgba(255,255,255,0.35)')
+    grad.addColorStop(0.5, 'rgba(255,255,255,0.12)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.ClampToEdgeWrapping
+  return texture
+}
+
+/** Generates a clean, stylized procedural Earth texture if loading fails. */
+function createProceduralEarth() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 512
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  // Deep blue ocean background
+  ctx.fillStyle = '#0f1c3f'
+  ctx.fillRect(0, 0, 1024, 512)
+
+  // Draw landmasses
+  ctx.fillStyle = '#1e3820'
+  
+  // North America
+  ctx.beginPath()
+  ctx.arc(240, 180, 70, 0, Math.PI * 2)
+  ctx.arc(300, 200, 40, 0, Math.PI * 2)
+  ctx.fill()
+
+  // South America
+  ctx.beginPath()
+  ctx.arc(320, 340, 60, 0, Math.PI * 2)
+  ctx.arc(300, 280, 50, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Eurasia
+  ctx.beginPath()
+  ctx.arc(640, 160, 90, 0, Math.PI * 2)
+  ctx.arc(760, 180, 80, 0, Math.PI * 2)
+  ctx.arc(560, 180, 60, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Africa
+  ctx.beginPath()
+  ctx.arc(600, 320, 70, 0, Math.PI * 2)
+  ctx.arc(640, 280, 50, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Australia
+  ctx.beginPath()
+  ctx.arc(860, 360, 44, 0, Math.PI * 2)
+  ctx.fill()
+
+  // Soften continent edges for a realistic visual blend
+  ctx.filter = 'blur(12px)'
+  ctx.drawImage(canvas, 0, 0)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  return texture
+}
+
+// ── Atmosphere shader ─────────────────────────────────────────────────────────
+
+const AtmosphereShader = {
+  vertexShader: `
+    varying vec3 vNormal;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vNormal;
+    void main() {
+      // Atmospheric glow halo based on eye-space normals
+      float intensity = pow(0.65 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 3.0);
+      gl_FragColor = vec4(0.3, 0.65, 1.0, 1.0) * intensity * 0.7;
+    }
+  `
+}
+
 // ── Earth mesh ────────────────────────────────────────────────────────────────
 
-/** Renders the Earth sphere, atmosphere glow, and wireframe overlay. */
+/** Renders a high-quality NASA-style Earth sphere, clouds layer, and glow halo. */
 function EarthMesh() {
   const earthRef = useRef(/** @type {THREE.Mesh|null} */ (null))
+  const cloudsRef = useRef(/** @type {THREE.Mesh|null} */ (null))
 
-  // Very slow self-rotation to give a sense of life
+  const [earthTexture, setEarthTexture] = useState(/** @type {THREE.Texture|null} */ (null))
+  const [cloudsTexture, setCloudsTexture] = useState(/** @type {THREE.Texture|null} */ (null))
+
+  useEffect(() => {
+    const loader = new THREE.TextureLoader()
+    
+    loader.load(
+      '/earth-texture.jpg',
+      (tex) => {
+        tex.minFilter = THREE.LinearMipmapLinearFilter
+        tex.magFilter = THREE.LinearFilter
+        tex.generateMipmaps = true
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.needsUpdate = true
+        setEarthTexture(tex)
+      },
+      undefined,
+      (err) => {
+        console.warn('Failed to load Earth texture, generating fallback:', err)
+        const fallbackTex = createProceduralEarth()
+        if (fallbackTex) {
+          fallbackTex.colorSpace = THREE.SRGBColorSpace
+          setEarthTexture(fallbackTex)
+        }
+      }
+    )
+
+    loader.load(
+      '/earth-clouds.png',
+      (tex) => {
+        tex.minFilter = THREE.LinearMipmapLinearFilter
+        tex.magFilter = THREE.LinearFilter
+        tex.generateMipmaps = true
+        tex.needsUpdate = true
+        setCloudsTexture(tex)
+      },
+      undefined,
+      (err) => {
+        console.warn('Failed to load clouds texture, generating fallback:', err)
+        const fallbackClouds = createProceduralClouds()
+        setCloudsTexture(fallbackClouds)
+      }
+    )
+  }, [])
+
+  // Rotate Earth and clouds independently and slowly
   useFrame((_, delta) => {
-    if (earthRef.current) earthRef.current.rotation.y += delta * 0.04
+    if (earthRef.current) {
+      earthRef.current.rotation.y += delta * 0.015
+    }
+    if (cloudsRef.current) {
+      cloudsRef.current.rotation.y += delta * 0.022
+    }
   })
 
   return (
@@ -80,33 +240,51 @@ function EarthMesh() {
       <mesh ref={earthRef} castShadow receiveShadow>
         <sphereGeometry args={[R, 64, 64]} />
         <meshStandardMaterial
-          color="#1a3a5c"
-          roughness={0.8}
-          metalness={0.2}
-          envMapIntensity={0.5}
+          key={earthTexture ? 'textured' : 'solid'}
+          map={earthTexture}
+          color={earthTexture ? '#ffffff' : '#0f1c3f'}
+          roughness={0.9}
+          metalness={0.0}
         />
       </mesh>
 
-      {/* ── Wireframe overlay ────────────────────────────────────────────── */}
+      {/* ── Independent Cloud layer ──────────────────────────────────────── */}
+      {cloudsTexture && (
+        <mesh ref={cloudsRef}>
+          <sphereGeometry args={[R * 1.01, 64, 64]} />
+          <meshStandardMaterial
+            key={cloudsTexture.uuid}
+            alphaMap={cloudsTexture}
+            color="#ffffff"
+            transparent
+            opacity={0.3}
+            depthWrite={false}
+            blending={THREE.NormalBlending}
+          />
+        </mesh>
+      )}
+
+      {/* ── Subtle mission-control wireframe grid overlay ───────────────── */}
       <mesh>
         <sphereGeometry args={[R + 0.015, 36, 36]} />
         <meshBasicMaterial
-          color="#00ffff"
+          color="#2a5d91"
           wireframe
-          opacity={0.08}
+          opacity={0.05}
           transparent
           depthWrite={false}
         />
       </mesh>
 
-      {/* ── Atmosphere glow (rendered on the back-face so it halos the sphere) */}
+      {/* ── Atmosphere glow halo ─────────────────────────────────────────── */}
       <mesh>
-        <sphereGeometry args={[R + 0.35, 64, 64]} />
-        <meshBasicMaterial
-          color="#4a90d9"
-          opacity={0.15}
-          transparent
+        <sphereGeometry args={[R * 1.03, 64, 64]} />
+        <shaderMaterial
+          vertexShader={AtmosphereShader.vertexShader}
+          fragmentShader={AtmosphereShader.fragmentShader}
+          blending={THREE.AdditiveBlending}
           side={THREE.BackSide}
+          transparent
           depthWrite={false}
         />
       </mesh>
@@ -178,8 +356,8 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
       const [x, y, z] = geoToCartesian(lat, lon, alt)
 
       dummy.position.set(x, y, z)
-      // Scale up selected satellite
-      const scale = String(sat.norad_id) === String(selectedNoradId) ? 2.2 : 1
+      // Initial scale: selected satellite starts larger
+      const scale = String(sat.norad_id) === String(selectedNoradId) ? 2.4 : 1
       dummy.scale.setScalar(scale)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -195,6 +373,29 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
   }, [visible, selectedNoradId, dummy, colorObj])
+
+  // Pulse the selected satellite instance's scale in the frame loop
+  useFrame(({ clock }) => {
+    if (!selectedNoradId || !meshRef.current) return
+
+    const idx = visible.findIndex((sat) => String(sat.norad_id) === String(selectedNoradId))
+    if (idx === -1) return
+
+    const sat = visible[idx]
+    const lat = sat.latitude ?? sat.lat ?? 0
+    const lon = sat.longitude ?? sat.lon ?? 0
+    const alt = sat.altitude_km ?? sat.altitude ?? 400
+    const [x, y, z] = geoToCartesian(lat, lon, alt)
+
+    // Pulse scale between 1.9 and 2.9
+    const s = 2.1 + Math.sin(clock.getElapsedTime() * 7.5) * 0.4
+
+    dummy.position.set(x, y, z)
+    dummy.scale.setScalar(s)
+    dummy.updateMatrix()
+    meshRef.current.setMatrixAt(idx, dummy.matrix)
+    meshRef.current.instanceMatrix.needsUpdate = true
+  })
 
   // Click → select
   const handleClick = useCallback(
@@ -249,26 +450,23 @@ SatelliteDots.propTypes = {
 // ── Orbital trail ─────────────────────────────────────────────────────────────
 
 /**
- * Renders a simplified circular orbital trail for the selected satellite.
- * Uses 18 evenly-spaced points at ±5 min intervals around the current position.
+ * Renders a glowing orbital trail for the selected satellite.
  *
  * @param {Object} props
  * @param {Object} props.satellite  Satellite position object (lat, lon, altitude_km)
  */
 function OrbitalTrail({ satellite }) {
-  const TRAIL_POINTS = 18
+  const TRAIL_POINTS = 36 // Smooth curves
 
   const points = useMemo(() => {
     const lat = satellite.latitude ?? satellite.lat ?? 0
     const lon = satellite.longitude ?? satellite.lon ?? 0
     const alt = satellite.altitude_km ?? satellite.altitude ?? 400
 
-    // Simulate 18 trail points by stepping longitude over 90 minutes
-    // (Earth's surface moves ~0.25°/min relative to a LEO satellite)
     const pts = []
     for (let i = 0; i < TRAIL_POINTS; i++) {
-      const t = i - TRAIL_POINTS / 2 // range: -9 … +8 (minutes * 5)
-      const stepLon = lon + t * (360 / (90 * 60)) * 300 // 300s per step
+      const t = i - TRAIL_POINTS / 2
+      const stepLon = lon + t * (360 / (90 * 60)) * 150
       const [x, y, z] = geoToCartesian(lat, stepLon, alt)
       pts.push(new THREE.Vector3(x, y, z))
     }
@@ -276,19 +474,70 @@ function OrbitalTrail({ satellite }) {
   }, [satellite])
 
   return (
-    <Line
-      points={points}
-      color="#00d4ff"
-      lineWidth={1.2}
-      opacity={0.55}
-      transparent
-      dashed={false}
-    />
+    <group>
+      {/* Thicker soft glowing trail line */}
+      <Line
+        points={points}
+        color="#00d4ff"
+        lineWidth={3.0}
+        opacity={0.3}
+        transparent
+        depthWrite={false}
+      />
+      {/* Thin, hot white core line */}
+      <Line
+        points={points}
+        color="#ffffff"
+        lineWidth={1.2}
+        opacity={0.8}
+        transparent
+        depthWrite={false}
+      />
+    </group>
   )
 }
 
 OrbitalTrail.propTypes = {
   satellite: PropTypes.object.isRequired,
+}
+
+// ── Selected Satellite Glowing Ring ───────────────────────────────────────────
+
+/**
+ * Renders a pulsing glowing ring around the selected satellite that always faces the camera.
+ *
+ * @param {Object} props
+ * @param {[number, number, number]} props.position Cartesian coordinates
+ */
+function SelectedSatelliteRing({ position }) {
+  const ringRef = useRef(null)
+
+  useFrame(({ clock, camera }) => {
+    if (ringRef.current) {
+      // Rotate mesh to face camera
+      ringRef.current.quaternion.copy(camera.quaternion)
+      // Pulse scale between 1.0 and 1.8
+      const s = 1.0 + Math.sin(clock.getElapsedTime() * 7) * 0.4
+      ringRef.current.scale.set(s, s, s)
+    }
+  })
+
+  return (
+    <mesh ref={ringRef} position={position}>
+      <ringGeometry args={[0.16, 0.24, 32]} />
+      <meshBasicMaterial
+        color="#00ffff"
+        transparent
+        opacity={0.8}
+        depthWrite={false}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  )
+}
+
+SelectedSatelliteRing.propTypes = {
+  position: PropTypes.arrayOf(PropTypes.number).isRequired,
 }
 
 // ── Hovered tooltip wrapper ───────────────────────────────────────────────────
@@ -331,29 +580,93 @@ HoverTooltip.propTypes = {
  * @param {Array}       props.positions
  * @param {string|null} props.selectedNoradId
  * @param {Function}    props.onSelect
- * @param {Function}    props.onResetCamera
  * @param {Object}      props.controlsRef
  */
 function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controlsRef }) {
   const [hoveredSat, setHoveredSat] = useState(/** @type {Object|null} */ (null))
+  const [followActive, setFollowActive] = useState(false)
+  const [autoRotateSpeed, setAutoRotateSpeed] = useState(0.5)
 
-  // Find the selected satellite's live position for the orbital trail
+  // Listen to camera follow and demo events
+  useEffect(() => {
+    const handleFollow = () => {
+      setFollowActive((prev) => !prev)
+    }
+    const handleDemoSelect = () => {
+      // Auto-focus and follow in demo mode
+      setFollowActive(true)
+    }
+    const handleAutoRotate = (e) => {
+      const { enabled, speed } = e.detail ?? {}
+      setAutoRotateSpeed(enabled ? speed : 0.5)
+    }
+
+    window.addEventListener('ow:follow-satellite', handleFollow)
+    window.addEventListener('ow:demo-select-satellite', handleDemoSelect)
+    window.addEventListener('ow:demo-auto-rotate', handleAutoRotate)
+
+    return () => {
+      window.removeEventListener('ow:follow-satellite', handleFollow)
+      window.removeEventListener('ow:demo-select-satellite', handleDemoSelect)
+      window.removeEventListener('ow:demo-auto-rotate', handleAutoRotate)
+    }
+  }, [])
+
+  // Auto-disable follow if selection is cleared
+  useEffect(() => {
+    if (!selectedNoradId) {
+      setFollowActive(false)
+    }
+  }, [selectedNoradId])
+
+  // Find the selected satellite's live position for the orbital trail and camera follow
   const selectedSatPos = useMemo(() => {
     if (!selectedNoradId) return null
     return positions.find((p) => String(p.norad_id) === String(selectedNoradId)) ?? null
   }, [selectedNoradId, positions])
 
+  // Get selected satellite position coordinates
+  const selectedSatCartesian = useMemo(() => {
+    if (!selectedSatPos) return null
+    const lat = selectedSatPos.latitude ?? selectedSatPos.lat ?? 0
+    const lon = selectedSatPos.longitude ?? selectedSatPos.lon ?? 0
+    const alt = selectedSatPos.altitude_km ?? selectedSatPos.altitude ?? 400
+    return geoToCartesian(lat, lon, alt)
+  }, [selectedSatPos])
+
+  // Camera follow / target centering in useFrame
+  useFrame(() => {
+    if (followActive && selectedSatCartesian && controlsRef.current) {
+      const [x, y, z] = selectedSatCartesian
+      const targetVec = new THREE.Vector3(x, y, z)
+      // Smoothly interpolate the controls target to the satellite position
+      controlsRef.current.target.lerp(targetVec, 0.1)
+      controlsRef.current.update()
+    } else if (controlsRef.current) {
+      // Lerp controls target back to Earth's center
+      const centerVec = new THREE.Vector3(0, 0, 0)
+      if (controlsRef.current.target.distanceTo(centerVec) > 0.001) {
+        controlsRef.current.target.lerp(centerVec, 0.1)
+        controlsRef.current.update()
+      }
+    }
+  })
+
   return (
     <>
       {/* ── Lighting ──────────────────────────────────────────────────────── */}
-      <ambientLight intensity={0.3} />
-      <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />
-      <pointLight position={[-10, -10, -5]} intensity={0.5} color="#00d4ff" />
+      <ambientLight intensity={0.35} />
+      {/* Direct Sun light */}
+      <directionalLight position={[10, 5, 10]} intensity={1.8} castShadow />
+      {/* Subtle back rim light for atmospheric outline pop */}
+      <directionalLight position={[-12, -6, -12]} intensity={1.0} color="#0055aa" />
+      {/* Dark side fill point light */}
+      <pointLight position={[-10, -5, -10]} intensity={0.3} color="#001a35" />
 
-      {/* ── Background stars ──────────────────────────────────────────────── */}
-      <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+      {/* ── Cinematic Stars field background ──────────────────────────────── */}
+      <Stars radius={300} depth={150} count={15000} factor={6} saturation={0.8} fade speed={1.5} />
 
-      {/* ── Earth ─────────────────────────────────────────────────────────── */}
+      {/* ── Earth sphere, clouds layer, atmosphere glow halo ──────────────── */}
       <EarthMesh />
 
       {/* ── Satellite dots ────────────────────────────────────────────────── */}
@@ -368,6 +681,9 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
       {/* ── Orbital trail for selected satellite ──────────────────────────── */}
       {selectedSatPos && <OrbitalTrail satellite={selectedSatPos} />}
 
+      {/* ── Pulsing glowing ring for selected satellite ───────────────────── */}
+      {selectedSatCartesian && <SelectedSatelliteRing position={selectedSatCartesian} />}
+
       {/* ── Hover tooltip ─────────────────────────────────────────────────── */}
       <HoverTooltip hoveredSat={hoveredSat} />
 
@@ -377,8 +693,8 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
         enablePan={false}
         minDistance={8}
         maxDistance={30}
-        autoRotate
-        autoRotateSpeed={0.5}
+        autoRotate={!followActive}
+        autoRotateSpeed={autoRotateSpeed}
         makeDefault
       />
     </>
