@@ -76,10 +76,10 @@ RiskBadge.propTypes = { level: PropTypes.string }
 const ConjunctionRow = memo(function ConjunctionRow({ conjunction, isSelected, onSelect }) {
   const c = conjunction
   const approachTime = c.approach_time ?? c.tca ?? c.time_of_closest_approach
-  const missDist     = c.miss_distance ?? c.distance
+  const missDist     = c.miss_distance_km ?? c.miss_distance ?? c.distance
   const prob         = c.collision_probability ?? c.probability ?? c.prob
-  const sat1         = c.satellite1_name ?? c.sat1_name ?? c.primary ?? '—'
-  const sat2         = c.satellite2_name ?? c.sat2_name ?? c.secondary ?? '—'
+  const sat1         = c.sat1_name ?? c.satellite1_name ?? c.primary ?? '—'
+  const sat2         = c.sat2_name ?? c.satellite2_name ?? c.secondary ?? '—'
 
   return (
     <tr

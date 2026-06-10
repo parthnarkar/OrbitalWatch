@@ -63,7 +63,7 @@ async def broadcast_positions() -> None:
             payloads = await asyncio.gather(*[_position_payload(satellite) for satellite in satellites])
             data = [payload for payload in payloads if payload is not None]
             if manager.get_active_connections():
-                await sio.emit("satellite_positions", {"event": "satellite_positions", "data": data})
+                await sio.emit("satellite_positions", data)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -84,7 +84,10 @@ async def listen_for_alerts(redis: Redis | None) -> None:
                     continue
                 raw = message.get("data")
                 data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
-                await sio.emit("new_alert", data)
+                if isinstance(data, dict) and "data" in data:
+                    await sio.emit("new_alert", data["data"])
+                else:
+                    await sio.emit("new_alert", data)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -168,3 +168,8 @@ async def scan_conjunctions(
 async def get_satellite_name(db_session: AsyncSession, norad_id: str) -> str:
     result = await db_session.execute(select(SatelliteModel.name).where(SatelliteModel.norad_id == norad_id))
     return result.scalar_one_or_none() or norad_id
+
+
+async def get_satellite_type(db_session: AsyncSession, norad_id: str) -> str:
+    result = await db_session.execute(select(SatelliteModel.object_type).where(SatelliteModel.norad_id == norad_id))
+    return result.scalar_one_or_none() or "unknown"

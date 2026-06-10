@@ -17,9 +17,7 @@ if (!rootElement) {
 }
 
 createRoot(rootElement).render(
-  <StrictMode>
-    <ErrorBoundary label="OrbitalWatch App">
-      <App />
-    </ErrorBoundary>
-  </StrictMode>
+  <ErrorBoundary label="OrbitalWatch App">
+    <App />
+  </ErrorBoundary>
 )

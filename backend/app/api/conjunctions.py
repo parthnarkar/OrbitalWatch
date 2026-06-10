@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.conjunction import ConjunctionModel
 from app.schemas.satellite import ConjunctionResponse
-from app.services.conjunction import get_satellite_name
+from app.services.conjunction import get_satellite_name, get_satellite_type
 
 router = APIRouter(prefix="/api/conjunctions", tags=["conjunctions"])
 
@@ -20,8 +20,10 @@ async def serialize_conjunction(db: AsyncSession, conjunction: ConjunctionModel)
         id=conjunction.id,
         sat1_norad_id=conjunction.sat1_norad_id,
         sat1_name=await get_satellite_name(db, conjunction.sat1_norad_id),
+        sat1_type=await get_satellite_type(db, conjunction.sat1_norad_id),
         sat2_norad_id=conjunction.sat2_norad_id,
         sat2_name=await get_satellite_name(db, conjunction.sat2_norad_id),
+        sat2_type=await get_satellite_type(db, conjunction.sat2_norad_id),
         approach_time=conjunction.approach_time,
         miss_distance_km=conjunction.miss_distance_km,
         risk_level=conjunction.risk_level,

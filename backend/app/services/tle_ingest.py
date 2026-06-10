@@ -11,17 +11,20 @@ from app.models.satellite import SatelliteModel
 
 logger = logging.getLogger(__name__)
 
-CELESTRAK_GROUPS: tuple[str, ...] = ("active", "visual", "stations", "debris")
+CELESTRAK_GROUPS: tuple[str, ...] = ("last-30-days", "visual", "stations", "science", "debris")
 
 
 async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
     url = f"https://celestrak.org/NORAD/elements/gp.php?GROUP={category}&FORMAT=TLE"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
             response = await client.get(url)
             response.raise_for_status()
     except httpx.HTTPError as exc:
-        logger.exception("Failed to fetch TLEs for category %s", category)
+        logger.warning("Failed to fetch TLEs for category %s: %s (continuing with other categories)", category, exc)
         return []
 
     lines = [line.strip() for line in response.text.splitlines() if line.strip()]
@@ -41,7 +44,23 @@ async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
 
 
 async def ingest_satellites(db_session: AsyncSession) -> int:
+    # Check current count
+    count_result = await db_session.execute(select(SatelliteModel))
+    current_count = len(list(count_result.scalars().all()))
+
+    if current_count >= 500:
+        logger.info("Catalog already seeded with %s satellites", current_count)
+        return 0
+
     ingested_count = 0
+    category_limits = {
+        "last-30-days": 150,
+        "visual": 150,
+        "stations": 50,
+        "science": 150,
+        "debris": 150
+    }
+
     for category in CELESTRAK_GROUPS:
         try:
             tle_records = await fetch_tle_from_celestrak(category)
@@ -50,7 +69,8 @@ async def ingest_satellites(db_session: AsyncSession) -> int:
             continue
 
         object_type = "debris" if category == "debris" else "payload"
-        for record in tle_records:
+        limit = category_limits.get(category, 100)
+        for record in tle_records[:limit]:
             result = await db_session.execute(
                 select(SatelliteModel).where(SatelliteModel.norad_id == record["norad_id"])
             )

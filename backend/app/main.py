@@ -20,7 +20,7 @@ from app.core.database import AsyncSessionLocal, init_db
 from app.models.conjunction import ConjunctionModel
 from app.models.satellite import SatelliteModel
 from app.services import scheduler
-from app.services.scheduler import configure_scheduler, start_scheduler, stop_scheduler
+from app.services.scheduler import configure_scheduler, start_scheduler, stop_scheduler, run_conjunction_scan
 from app.services.tle_ingest import ingest_satellites
 from app.websocket.stream import broadcast_positions, listen_for_alerts, sio
 
@@ -46,12 +46,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=False)
         await redis_client.ping()
         configure_scheduler(redis_client)
-    except Exception:
-        logger.exception("Redis unavailable at startup; continuing without alert pub/sub")
+    except Exception as exc:
+        logger.warning("Redis unavailable at startup (%s); continuing without alert pub/sub", exc)
         redis_client = None
         configure_scheduler(None)
 
     start_scheduler()
+    background_tasks.append(asyncio.create_task(run_conjunction_scan()))
     background_tasks.append(asyncio.create_task(broadcast_positions()))
     background_tasks.append(asyncio.create_task(listen_for_alerts(redis_client)))
     try:

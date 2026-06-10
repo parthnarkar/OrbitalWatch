@@ -10,10 +10,11 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY app.py ./
 
 RUN useradd -m -u 1000 orbital && chown -R orbital:orbital /app
 USER orbital
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:socket_app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python", "app.py"]

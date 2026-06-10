@@ -48,8 +48,10 @@ class ConjunctionResponse(BaseModel):
     id: int
     sat1_norad_id: str
     sat1_name: str = ""
+    sat1_type: str = ""
     sat2_norad_id: str
     sat2_name: str = ""
+    sat2_type: str = ""
     approach_time: datetime
     miss_distance_km: float
     risk_level: str

@@ -3,7 +3,7 @@ Create a complete FastAPI backend project for "OrbitalWatch" with the exact stru
 
 PROJECT STRUCTURE (create all these files):
 ```
-orbitalwatch-backend/
+backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py

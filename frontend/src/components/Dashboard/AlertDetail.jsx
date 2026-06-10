@@ -167,8 +167,8 @@ function AlertDetail({ conjunction, onClose }) {
   const handle3DPreview = useCallback(() => {
     setShow3DPreview((v) => !v)
     // Emit custom event so ThreeGlobe can pick up both satellites
-    const norad1 = conjunction?.satellite1_norad ?? conjunction?.norad1
-    const norad2 = conjunction?.satellite2_norad ?? conjunction?.norad2
+    const norad1 = conjunction?.sat1_norad_id ?? conjunction?.satellite1_norad ?? conjunction?.norad1
+    const norad2 = conjunction?.sat2_norad_id ?? conjunction?.satellite2_norad ?? conjunction?.norad2
     if (norad1 || norad2) {
       window.dispatchEvent(new CustomEvent('ow:focus-conjunction', { detail: { norad1, norad2 } }))
     }
@@ -179,7 +179,7 @@ function AlertDetail({ conjunction, onClose }) {
   const riskLevel = conjunction.risk_level ?? 'LOW'
   const riskCfg   = RISK_CONFIG[riskLevel] ?? RISK_CONFIG.LOW
   const prob       = conjunction.collision_probability ?? conjunction.probability ?? conjunction.prob
-  const missDist   = conjunction.miss_distance ?? conjunction.distance
+  const missDist   = conjunction.miss_distance_km ?? conjunction.miss_distance ?? conjunction.distance
   const relVel     = conjunction.relative_velocity ?? conjunction.rel_velocity
 
   return (
@@ -301,14 +301,14 @@ function AlertDetail({ conjunction, onClose }) {
             </div>
             <div style={{ display: 'flex', gap: '0.625rem' }}>
               <SatMiniCard
-                name={conjunction.satellite1_name ?? conjunction.sat1_name ?? conjunction.primary}
-                noradId={String(conjunction.satellite1_norad ?? conjunction.norad1 ?? '')}
-                type={conjunction.satellite1_type ?? conjunction.sat1_type}
+                name={conjunction.sat1_name ?? conjunction.satellite1_name ?? conjunction.primary}
+                noradId={String(conjunction.sat1_norad_id ?? conjunction.satellite1_norad ?? conjunction.norad1 ?? '')}
+                type={conjunction.sat1_type ?? conjunction.satellite1_type}
               />
               <SatMiniCard
-                name={conjunction.satellite2_name ?? conjunction.sat2_name ?? conjunction.secondary}
-                noradId={String(conjunction.satellite2_norad ?? conjunction.norad2 ?? '')}
-                type={conjunction.satellite2_type ?? conjunction.sat2_type}
+                name={conjunction.sat2_name ?? conjunction.satellite2_name ?? conjunction.secondary}
+                noradId={String(conjunction.sat2_norad_id ?? conjunction.satellite2_norad ?? conjunction.norad2 ?? '')}
+                type={conjunction.sat2_type ?? conjunction.satellite2_type}
               />
             </div>
           </div>

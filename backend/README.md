@@ -11,6 +11,12 @@ docker compose up -d
 
 ## Development
 
+### Run Locally:
+```bash
+python app.py
+```
+
+### Run using Docker Compose:
 ```bash
 docker compose -f docker-compose.dev.yml up
 ```
