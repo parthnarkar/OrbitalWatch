@@ -6,6 +6,7 @@ import { useState, useCallback } from 'react'
 import PropTypes from 'prop-types'
 import { searchSatellites } from '../../services/api.js'
 import { useAppContext } from '../../context/AppContext.jsx'
+import OrbitalClock from '../Dashboard/OrbitalClock.jsx'
 
 // ── Search Icon ───────────────────────────────────────────────────────────────
 
@@ -221,6 +222,7 @@ function Header({ connected, onResetCamera }) {
 
       {/* ── Right Side Actions ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <OrbitalClock />
         {/* Alert badge */}
         {activeAlert && (
           <div

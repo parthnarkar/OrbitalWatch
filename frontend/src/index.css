@@ -313,3 +313,17 @@ input:focus, textarea:focus, select:focus {
 input::placeholder {
   color: var(--space-text-dim);
 }
+
+/* ── Toast Animations ─────────────────────────────────── */
+@keyframes toast-slide-out {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(120%); opacity: 0; }
+}
+
+.toast-enter {
+  animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.toast-exit {
+  animation: toast-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

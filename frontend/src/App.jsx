@@ -1,23 +1,26 @@
 /**
  * @fileoverview App.jsx — Root application component for OrbitalWatch.
- * F3 update: two-mode layout (Globe / Alerts), SearchBar, StatsCards,
- * SatelliteInfo, AlertPanel, AlertDetail fully wired.
+ * Wired with charts, FilterBar, live stats, and toast alerts.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import PropTypes from 'prop-types'
 import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
 import ThreeGlobe from './components/Globe/ThreeGlobe.jsx'
 
 // Dashboard components
-import SearchBar    from './components/Dashboard/SearchBar.jsx'
-import SatelliteInfo from './components/Dashboard/SatelliteInfo.jsx'
-import StatsCards   from './components/Dashboard/StatsCards.jsx'
-import AlertPanel   from './components/Dashboard/AlertPanel.jsx'
-import AlertDetail  from './components/Dashboard/AlertDetail.jsx'
+import SearchBar         from './components/Dashboard/SearchBar.jsx'
+import SatelliteInfo     from './components/Dashboard/SatelliteInfo.jsx'
+import StatsCards        from './components/Dashboard/StatsCards.jsx'
+import AlertPanel        from './components/Dashboard/AlertPanel.jsx'
+import AlertDetail       from './components/Dashboard/AlertDetail.jsx'
+import FilterBar         from './components/Dashboard/FilterBar.jsx'
+import AltitudeChart     from './components/Dashboard/AltitudeChart.jsx'
+import TypeDistribution  from './components/Dashboard/TypeDistribution.jsx'
+import NotificationToast from './components/Dashboard/NotificationToast.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
-import useWebSocket  from './hooks/useWebSocket.js'
 import { fetchStats, fetchConjunctions } from './services/api.js'
 import './index.css'
 
@@ -57,6 +60,12 @@ function StatChip({ label, value, color }) {
       </span>
     </div>
   )
+}
+
+StatChip.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+  color: PropTypes.string.isRequired,
 }
 
 // ── Legend ────────────────────────────────────────────────────────────────────
@@ -103,14 +112,20 @@ function Legend() {
 // ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
- * Globe mode: ThreeGlobe (top 70%) + SearchBar overlay + StatsCards + SatelliteInfo panel.
+ * Globe mode: ThreeGlobe + SearchBar overlay + StatsCards + SatelliteInfo + Charts.
  *
  * @param {{ onResetCamera: Function, controlsRef: Object, stats: Object }} props
  */
 function GlobeView({ onResetCamera, controlsRef, stats }) {
   const { satellites, loading: satLoading } = useSatellites()
-  const { positions, connected, lastUpdate } = useWebSocket()
-  const { setSelectedSatellite } = useAppContext()
+  const {
+    connected,
+    lastUpdate,
+    filteredSatellites,
+    filters,
+    setFilters,
+    setSelectedSatellite,
+  } = useAppContext()
 
   const [selectedNoradId, setSelectedNoradId] = useState(/** @type {string|null} */ (null))
 
@@ -149,11 +164,16 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
         overflow: 'hidden',
       }}
     >
+      {/* FilterBar above ThreeGlobe */}
+      <div style={{ padding: '8px 16px', background: 'var(--space-bg)' }}>
+        <FilterBar filters={filters} onChange={setFilters} />
+      </div>
+
       {/* ── Globe (top ~70%) ───────────────────────────────────────────────── */}
-      <div style={{ flex: '0 0 70%', position: 'relative', minHeight: 0 }}>
+      <div style={{ flex: '0 0 62%', position: 'relative', minHeight: 0 }}>
         <ThreeGlobe
           satellites={satellites}
-          positions={positions}
+          positions={filteredSatellites}
           selectedNoradId={selectedNoradId}
           onSelect={handleSelect}
           controlsRef={controlsRef}
@@ -187,7 +207,7 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
           }}
         >
           <StatChip label="Tracked"       value={satLoading ? '…' : satellites.length.toLocaleString()} color="var(--space-cyan)" />
-          <StatChip label="Live Positions" value={positions.length.toLocaleString()} color="var(--space-green)" />
+          <StatChip label="Live Positions" value={filteredSatellites.length.toLocaleString()} color="var(--space-green)" />
           <StatChip label="Stream"         value={connected ? 'LIVE' : 'OFFLINE'} color={connected ? 'var(--space-green)' : 'var(--space-red)'} />
           {lastUpdate && <StatChip label="Updated" value={lastUpdate.toLocaleTimeString()} color="var(--space-text-muted)" />}
         </div>
@@ -236,10 +256,10 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
         </button>
       </div>
 
-      {/* ── Bottom 30%: StatsCards + SatelliteInfo ─────────────────────────── */}
+      {/* ── Bottom 38%: StatsCards + SatelliteInfo + Charts ─────────────────── */}
       <div
         style={{
-          flex: '0 0 30%',
+          flex: '0 0 38%',
           display: 'flex',
           flexDirection: 'column',
           minHeight: 0,
@@ -249,12 +269,78 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
       >
         <StatsCards stats={stats} />
 
-        <div style={{ flex: 1, padding: '0 1rem 1rem', minHeight: 0 }}>
-          <SatelliteInfo noradId={selectedNoradId} />
+        <div
+          style={{
+            flex: 1,
+            padding: '0 1rem 1rem',
+            minHeight: 0,
+            display: 'flex',
+            gap: '1rem',
+            overflowY: 'auto',
+          }}
+        >
+          {/* Info Card */}
+          <div style={{ flex: '1 1 300px', minWidth: 280, display: 'flex', flexDirection: 'column' }}>
+            <SatelliteInfo noradId={selectedNoradId} />
+          </div>
+
+          {/* Charts Container */}
+          <div
+            style={{
+              flex: '2 1 500px',
+              display: 'flex',
+              gap: '1rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            {/* Altitude Chart */}
+            <div
+              className="card"
+              style={{
+                flex: '1 1 240px',
+                padding: '12px 16px',
+                background: 'var(--space-card, #0f0f1a)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                Altitude Distribution
+              </h3>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 0 }}>
+                <AltitudeChart satellites={filteredSatellites} />
+              </div>
+            </div>
+
+            {/* Type Chart */}
+            <div
+              className="card"
+              style={{
+                flex: '1 1 240px',
+                padding: '12px 16px',
+                background: 'var(--space-card, #0f0f1a)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
+                Type Breakdown
+              </h3>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 0 }}>
+                <TypeDistribution satellites={filteredSatellites} />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+GlobeView.propTypes = {
+  onResetCamera: PropTypes.func.isRequired,
+  controlsRef: PropTypes.object.isRequired,
+  stats: PropTypes.object,
 }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
@@ -292,6 +378,10 @@ function AlertsView({ conjunctions }) {
   )
 }
 
+AlertsView.propTypes = {
+  conjunctions: PropTypes.arrayOf(PropTypes.object).isRequired,
+}
+
 // ── App Root ──────────────────────────────────────────────────────────────────
 
 /**
@@ -301,6 +391,13 @@ function AppInner() {
   const controlsRef = useRef(null)
   const [stats, setStats]               = useState(/** @type {Object|null} */ (null))
   const [conjunctions, setConjunctions] = useState(/** @type {Object[]} */ ([]))
+
+  const {
+    pendingAlerts,
+    clearPendingAlerts,
+    setActiveAlert,
+    setActiveNav,
+  } = useAppContext()
 
   const handleResetCamera = useCallback(() => {
     controlsRef.current?.reset()
@@ -320,21 +417,55 @@ function AppInner() {
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
 
+  // Limit notifications shown to max 3 at once
+  const visibleAlerts = useMemo(() => pendingAlerts.slice(0, 3), [pendingAlerts])
+
   return (
-    <MainLayout onResetCamera={handleResetCamera}>
-      {({ activeView }) => {
-        if (activeView === 'alerts') {
-          return <AlertsView conjunctions={conjunctions} />
-        }
-        return (
-          <GlobeView
-            onResetCamera={handleResetCamera}
-            controlsRef={controlsRef}
-            stats={stats}
-          />
-        )
-      }}
-    </MainLayout>
+    <>
+      <MainLayout onResetCamera={handleResetCamera}>
+        {({ activeView }) => {
+          if (activeView === 'alerts') {
+            return <AlertsView conjunctions={conjunctions} />
+          }
+          return (
+            <GlobeView
+              onResetCamera={handleResetCamera}
+              controlsRef={controlsRef}
+              stats={stats}
+            />
+          )
+        }}
+      </MainLayout>
+
+      {/* Real-time Toast Notification Container */}
+      {visibleAlerts.length > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 'calc(var(--header-height) + 12px)',
+            right: '16px',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            pointerEvents: 'none',
+          }}
+        >
+          {visibleAlerts.map((alert) => (
+            <NotificationToast
+              key={alert.id ?? alert.conjunction_id}
+              alert={alert}
+              onDismiss={() => clearPendingAlerts(alert.id ?? alert.conjunction_id)}
+              onClick={() => {
+                setActiveAlert(alert)
+                setActiveNav('alerts')
+                clearPendingAlerts(alert.id ?? alert.conjunction_id)
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </>
   )
 }
 

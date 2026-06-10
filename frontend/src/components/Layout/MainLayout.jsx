@@ -3,11 +3,10 @@
  * F3 update: exposes activeView state, passes alertCount + connected to Sidebar.
  */
 
-import { useState } from 'react'
 import PropTypes from 'prop-types'
 import Sidebar from './Sidebar.jsx'
 import Header from './Header.jsx'
-import useWebSocket from '../../hooks/useWebSocket.js'
+import { useAppContext } from '../../context/AppContext.jsx'
 
 /**
  * @param {Object} props
@@ -17,22 +16,12 @@ import useWebSocket from '../../hooks/useWebSocket.js'
  * @returns {JSX.Element}
  */
 function MainLayout({ children, onResetCamera, onNavChange }) {
-  const [activeNav, setActiveNav] = useState('dashboard')
-  const { connected, alerts } = useWebSocket()
+  const { activeNav, setActiveNav, activeView, connected, alerts } = useAppContext()
 
   const handleNavChange = (id) => {
     setActiveNav(id)
     onNavChange?.(id)
   }
-
-  // Map nav id → view name for consumers
-  const VIEW_MAP = {
-    dashboard: 'globe',
-    satellites: 'globe',
-    search: 'globe',
-    alerts: 'alerts',
-  }
-  const activeView = VIEW_MAP[activeNav] ?? 'globe'
 
   return (
     <div
