@@ -8,6 +8,7 @@ import PropTypes from 'prop-types'
 import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
 import ThreeGlobe from './components/Globe/ThreeGlobe.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Dashboard components
 import SearchBar         from './components/Dashboard/SearchBar.jsx'
@@ -19,6 +20,7 @@ import FilterBar         from './components/Dashboard/FilterBar.jsx'
 import AltitudeChart     from './components/Dashboard/AltitudeChart.jsx'
 import TypeDistribution  from './components/Dashboard/TypeDistribution.jsx'
 import NotificationToast from './components/Dashboard/NotificationToast.jsx'
+import DemoMode, { useDemoMode } from './components/Dashboard/DemoMode.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
 import { fetchStats, fetchConjunctions } from './services/api.js'
@@ -171,13 +173,15 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
 
       {/* ── Globe (top ~70%) ───────────────────────────────────────────────── */}
       <div style={{ flex: '0 0 62%', position: 'relative', minHeight: 0 }}>
-        <ThreeGlobe
-          satellites={satellites}
-          positions={filteredSatellites}
-          selectedNoradId={selectedNoradId}
-          onSelect={handleSelect}
-          controlsRef={controlsRef}
-        />
+        <ErrorBoundary label="3D Globe">
+          <ThreeGlobe
+            satellites={satellites}
+            positions={filteredSatellites}
+            selectedNoradId={selectedNoradId}
+            onSelect={handleSelect}
+            controlsRef={controlsRef}
+          />
+        </ErrorBoundary>
 
         {/* SearchBar overlay – top centre */}
         <div
@@ -399,6 +403,12 @@ function AppInner() {
     setActiveNav,
   } = useAppContext()
 
+  // Demo mode (persisted in localStorage)
+  const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
+
+  // satellites for demo cycling
+  const { satellites } = useSatellites()
+
   const handleResetCamera = useCallback(() => {
     controlsRef.current?.reset()
   }, [])
@@ -422,7 +432,11 @@ function AppInner() {
 
   return (
     <>
-      <MainLayout onResetCamera={handleResetCamera}>
+      <MainLayout
+        onResetCamera={handleResetCamera}
+        demoEnabled={demoEnabled}
+        onToggleDemo={toggleDemo}
+      >
         {({ activeView }) => {
           if (activeView === 'alerts') {
             return <AlertsView conjunctions={conjunctions} />
@@ -436,6 +450,14 @@ function AppInner() {
           )
         }}
       </MainLayout>
+
+      {/* Demo Mode overlay + cycling logic */}
+      <DemoMode
+        enabled={demoEnabled}
+        onToggle={toggleDemo}
+        satellites={satellites}
+        conjunctions={conjunctions}
+      />
 
       {/* Real-time Toast Notification Container */}
       {visibleAlerts.length > 0 && (

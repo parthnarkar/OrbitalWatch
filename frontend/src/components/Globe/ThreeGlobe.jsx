@@ -14,7 +14,7 @@
  */
 
 import { Suspense, useRef, useMemo, useCallback, useState, useEffect } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Stars, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import PropTypes from 'prop-types'
@@ -126,7 +126,6 @@ function EarthMesh() {
  */
 function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHover }) {
   const meshRef = useRef(/** @type {THREE.InstancedMesh|null} */ (null))
-  const { raycaster } = useThree()
 
   // Build a fast lookup: norad_id → position data
   const posMap = useMemo(() => {

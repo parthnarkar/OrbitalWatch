@@ -4,9 +4,11 @@
 
 import { useState, useCallback } from 'react'
 import PropTypes from 'prop-types'
+import { Clapperboard } from 'lucide-react'
 import { searchSatellites } from '../../services/api.js'
 import { useAppContext } from '../../context/AppContext.jsx'
 import OrbitalClock from '../Dashboard/OrbitalClock.jsx'
+import ShortcutsButton from './KeyboardShortcuts.jsx'
 
 // ── Search Icon ───────────────────────────────────────────────────────────────
 
@@ -47,10 +49,10 @@ const BellIcon = () => (
 // ── Header Component ──────────────────────────────────────────────────────────
 
 /**
- * @param {{ connected: boolean, onResetCamera?: Function }} props
+ * @param {{ connected: boolean, onResetCamera?: Function, demoEnabled?: boolean, onToggleDemo?: Function }} props
  * @returns {JSX.Element}
  */
-function Header({ connected, onResetCamera }) {
+function Header({ connected, onResetCamera, demoEnabled, onToggleDemo }) {
   const { activeAlert } = useAppContext()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -223,6 +225,48 @@ function Header({ connected, onResetCamera }) {
       {/* ── Right Side Actions ────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <OrbitalClock />
+
+        {/* Demo Mode toggle */}
+        {onToggleDemo && (
+          <button
+            id="btn-demo-mode"
+            aria-label={demoEnabled ? 'Disable demo mode' : 'Enable demo mode'}
+            title={demoEnabled ? 'Demo Mode ON — click to disable' : 'Enable Demo Mode'}
+            onClick={onToggleDemo}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: demoEnabled ? 'rgba(0,212,255,0.15)' : 'var(--space-card)',
+              border: demoEnabled ? '1px solid rgba(0,212,255,0.4)' : '1px solid var(--space-border)',
+              color: demoEnabled ? 'var(--space-cyan)' : 'var(--space-text-muted)',
+              transition: 'all var(--transition-fast)',
+              cursor: 'pointer',
+              boxShadow: demoEnabled ? 'var(--glow-cyan)' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (!demoEnabled) {
+                e.currentTarget.style.color = 'var(--space-cyan)'
+                e.currentTarget.style.borderColor = 'rgba(0,212,255,0.3)'
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!demoEnabled) {
+                e.currentTarget.style.color = 'var(--space-text-muted)'
+                e.currentTarget.style.borderColor = 'var(--space-border)'
+              }
+            }}
+          >
+            <Clapperboard size={16} />
+          </button>
+        )}
+
+        {/* Keyboard shortcuts help */}
+        <ShortcutsButton onToggleDemoMode={onToggleDemo} />
+
         {/* Alert badge */}
         {activeAlert && (
           <div
@@ -332,8 +376,16 @@ function Header({ connected, onResetCamera }) {
 }
 
 Header.propTypes = {
-  connected: PropTypes.bool.isRequired,
-  onResetCamera: PropTypes.func,
+  connected:      PropTypes.bool.isRequired,
+  onResetCamera:  PropTypes.func,
+  demoEnabled:    PropTypes.bool,
+  onToggleDemo:   PropTypes.func,
+}
+
+Header.defaultProps = {
+  onResetCamera: null,
+  demoEnabled:   false,
+  onToggleDemo:  null,
 }
 
 export default Header

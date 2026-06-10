@@ -327,3 +327,41 @@ input::placeholder {
 .toast-exit {
   animation: toast-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* ── Demo Mode Animations ─────────────────────────────────── */
+@keyframes pulse-cyan {
+  0%, 100% { opacity: 1;   transform: scale(1);    }
+  50%       { opacity: 0.6; transform: scale(1.15); }
+}
+
+.animate-pulse-cyan {
+  animation: pulse-cyan 1.5s ease-in-out infinite;
+}
+
+/* ── Mobile bottom-bar spacing ─────────────────────────────── */
+@media (max-width: 767px) {
+  /* Push content above the 64px bottom nav */
+  #main-content { padding-bottom: 64px; }
+}
+
+/* ── Print Styles ──────────────────────────────────────────── */
+@media print {
+  /* Hide chrome, show only the globe canvas */
+  #sidebar,
+  #main-header,
+  #stats-cards,
+  #satellite-info-panel,
+  #alert-panel,
+  #alert-detail-panel,
+  #alert-detail-backdrop,
+  #demo-mode-badge,
+  #mobile-sheet-bar,
+  .toast-enter,
+  .toast-exit {
+    display: none !important;
+  }
+
+  #main-layout > div { margin-left: 0 !important; }
+  body { background: #000 !important; }
+  canvas { width: 100vw !important; height: 100vh !important; }
+}
