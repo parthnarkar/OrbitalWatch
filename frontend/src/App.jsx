@@ -1,65 +1,142 @@
 /**
  * @fileoverview App.jsx — Root application component for OrbitalWatch.
- *
- * Integrates the ThreeGlobe 3D visualisation with the satellite catalogue
- * (useSatellites) and live position stream (useWebSocket).
+ * F3 update: two-mode layout (Globe / Alerts), SearchBar, StatsCards,
+ * SatelliteInfo, AlertPanel, AlertDetail fully wired.
  */
 
-import { useState, useRef, useCallback } from 'react'
-import { AppProvider } from './context/AppContext.jsx'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
 import ThreeGlobe from './components/Globe/ThreeGlobe.jsx'
+
+// Dashboard components
+import SearchBar    from './components/Dashboard/SearchBar.jsx'
+import SatelliteInfo from './components/Dashboard/SatelliteInfo.jsx'
+import StatsCards   from './components/Dashboard/StatsCards.jsx'
+import AlertPanel   from './components/Dashboard/AlertPanel.jsx'
+import AlertDetail  from './components/Dashboard/AlertDetail.jsx'
+
 import useSatellites from './hooks/useSatellites.js'
-import useWebSocket from './hooks/useWebSocket.js'
+import useWebSocket  from './hooks/useWebSocket.js'
+import { fetchStats, fetchConjunctions } from './services/api.js'
 import './index.css'
 
-// ── Reset Camera icon ─────────────────────────────────────────────────────────
+// ── Reset Camera Icon ─────────────────────────────────────────────────────────
 
 const ResetIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
     <path d="M3 3v5h5" />
   </svg>
 )
 
-// ── GlobeDashboard ────────────────────────────────────────────────────────────
+// ── StatChip (globe overlay) ──────────────────────────────────────────────────
+
+/** @param {{ label: string, value: string, color: string }} props */
+function StatChip({ label, value, color }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        background: 'rgba(5,5,12,0.75)',
+        border: '1px solid var(--space-border-bright)',
+        borderRadius: 'var(--radius-md)',
+        padding: '0.35rem 0.7rem',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        minWidth: 70,
+      }}
+    >
+      <span style={{ fontSize: '1rem', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+        {value}
+      </span>
+      <span style={{ fontSize: '0.62rem', color: 'var(--space-text-dim)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 2 }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+
+function Legend() {
+  const items = [
+    { label: 'Payload',      color: '#00ff9d' },
+    { label: 'Debris',       color: '#ff4d4d' },
+    { label: 'Rocket Body',  color: '#ff9d00' },
+    { label: 'Unknown',      color: '#888888' },
+  ]
+  return (
+    <div
+      id="globe-legend"
+      style={{
+        position: 'absolute',
+        top: '1rem',
+        right: '1rem',
+        background: 'rgba(5,5,12,0.75)',
+        border: '1px solid var(--space-border-bright)',
+        borderRadius: 'var(--radius-md)',
+        padding: '0.6rem 0.85rem',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.35rem',
+        pointerEvents: 'none',
+      }}
+    >
+      <div style={{ fontSize: '0.62rem', color: 'var(--space-text-dim)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.15rem' }}>
+        Legend
+      </div>
+      {items.map(({ label, color }) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
+          <span style={{ fontSize: '0.7rem', color: 'var(--space-text-muted)' }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
- * The full-height dashboard containing the ThreeGlobe with live satellite data.
+ * Globe mode: ThreeGlobe (top 70%) + SearchBar overlay + StatsCards + SatelliteInfo panel.
  *
- * @param {{ onResetCamera: Function, controlsRef: Object }} props
- * @returns {JSX.Element}
+ * @param {{ onResetCamera: Function, controlsRef: Object, stats: Object }} props
  */
-function GlobeDashboard({ onResetCamera, controlsRef }) {
+function GlobeView({ onResetCamera, controlsRef, stats }) {
   const { satellites, loading: satLoading } = useSatellites()
   const { positions, connected, lastUpdate } = useWebSocket()
+  const { setSelectedSatellite } = useAppContext()
+
   const [selectedNoradId, setSelectedNoradId] = useState(/** @type {string|null} */ (null))
 
-  /** Deselects on double-click of the canvas background */
   const handleSelect = useCallback((noradId) => {
     setSelectedNoradId((prev) => (prev === noradId ? null : noradId))
+    // sync to context
+    const sat = satellites.find((s) => String(s.norad_id) === String(noradId))
+    setSelectedSatellite(sat ?? null)
+  }, [satellites, setSelectedSatellite])
+
+  // SearchBar selection → set selectedNoradId to focus globe
+  const handleSearchSelect = useCallback((sat) => {
+    const id = String(sat.norad_id)
+    setSelectedNoradId(id)
+    setSelectedSatellite(sat)
+  }, [setSelectedSatellite])
+
+  // Listen for 3D preview event from AlertDetail
+  useEffect(() => {
+    const handler = (e) => {
+      const { norad1 } = e.detail ?? {}
+      if (norad1) setSelectedNoradId(String(norad1))
+    }
+    window.addEventListener('ow:focus-conjunction', handler)
+    return () => window.removeEventListener('ow:focus-conjunction', handler)
   }, [])
-
-  // Find selected satellite metadata for the info panel
-  const selectedSat = selectedNoradId
-    ? satellites.find((s) => String(s.norad_id) === String(selectedNoradId)) ??
-      positions.find((p) => String(p.norad_id) === String(selectedNoradId)) ??
-      null
-    : null
-
-  const selectedPos = selectedNoradId
-    ? positions.find((p) => String(p.norad_id) === String(selectedNoradId)) ?? null
-    : null
 
   return (
     <div
@@ -72,8 +149,8 @@ function GlobeDashboard({ onResetCamera, controlsRef }) {
         overflow: 'hidden',
       }}
     >
-      {/* ── Globe canvas (fills remaining height) ──────────────────────── */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      {/* ── Globe (top ~70%) ───────────────────────────────────────────────── */}
+      <div style={{ flex: '0 0 70%', position: 'relative', minHeight: 0 }}>
         <ThreeGlobe
           satellites={satellites}
           positions={positions}
@@ -82,11 +159,26 @@ function GlobeDashboard({ onResetCamera, controlsRef }) {
           controlsRef={controlsRef}
         />
 
-        {/* ── Overlay: Stats strip ─────────────────────────────────────── */}
+        {/* SearchBar overlay – top centre */}
         <div
           style={{
             position: 'absolute',
             top: '1rem',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '90%',
+            maxWidth: 520,
+            zIndex: 20,
+          }}
+        >
+          <SearchBar onSelect={handleSearchSelect} />
+        </div>
+
+        {/* Stats strip – top left */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '4.5rem',
             left: '1rem',
             display: 'flex',
             gap: '0.75rem',
@@ -94,43 +186,15 @@ function GlobeDashboard({ onResetCamera, controlsRef }) {
             pointerEvents: 'none',
           }}
         >
-          <StatChip
-            label="Tracked"
-            value={satLoading ? '…' : satellites.length.toLocaleString()}
-            color="var(--space-cyan)"
-          />
-          <StatChip
-            label="Live Positions"
-            value={positions.length.toLocaleString()}
-            color="var(--space-green)"
-          />
-          <StatChip
-            label="Stream"
-            value={connected ? 'LIVE' : 'OFFLINE'}
-            color={connected ? 'var(--space-green)' : 'var(--space-red)'}
-          />
-          {lastUpdate && (
-            <StatChip
-              label="Updated"
-              value={lastUpdate.toLocaleTimeString()}
-              color="var(--space-text-muted)"
-            />
-          )}
+          <StatChip label="Tracked"       value={satLoading ? '…' : satellites.length.toLocaleString()} color="var(--space-cyan)" />
+          <StatChip label="Live Positions" value={positions.length.toLocaleString()} color="var(--space-green)" />
+          <StatChip label="Stream"         value={connected ? 'LIVE' : 'OFFLINE'} color={connected ? 'var(--space-green)' : 'var(--space-red)'} />
+          {lastUpdate && <StatChip label="Updated" value={lastUpdate.toLocaleTimeString()} color="var(--space-text-muted)" />}
         </div>
 
-        {/* ── Overlay: Selected satellite info panel ───────────────────── */}
-        {selectedNoradId && (
-          <SelectedPanel
-            sat={selectedSat}
-            pos={selectedPos}
-            onClose={() => setSelectedNoradId(null)}
-          />
-        )}
-
-        {/* ── Legend ───────────────────────────────────────────────────── */}
         <Legend />
 
-        {/* ── Reset camera button ──────────────────────────────────────── */}
+        {/* Reset camera button */}
         <button
           id="btn-reset-camera"
           aria-label="Reset camera view"
@@ -171,226 +235,59 @@ function GlobeDashboard({ onResetCamera, controlsRef }) {
           Reset Camera
         </button>
       </div>
-    </div>
-  )
-}
 
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-/**
- * @param {{ label: string, value: string, color: string }} props
- */
-function StatChip({ label, value, color }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        background: 'rgba(5,5,12,0.75)',
-        border: '1px solid var(--space-border-bright)',
-        borderRadius: 'var(--radius-md)',
-        padding: '0.35rem 0.7rem',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        minWidth: 70,
-      }}
-    >
-      <span
-        style={{
-          fontSize: '1rem',
-          fontWeight: 700,
-          color,
-          fontVariantNumeric: 'tabular-nums',
-          lineHeight: 1.2,
-        }}
-      >
-        {value}
-      </span>
-      <span
-        style={{
-          fontSize: '0.62rem',
-          color: 'var(--space-text-dim)',
-          fontWeight: 500,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          marginTop: 2,
-        }}
-      >
-        {label}
-      </span>
-    </div>
-  )
-}
-
-/**
- * @param {{ sat: Object|null, pos: Object|null, onClose: Function }} props
- */
-function SelectedPanel({ sat, pos, onClose }) {
-  const name = sat?.name ?? pos?.norad_id ?? '—'
-  const noradId = sat?.norad_id ?? pos?.norad_id ?? '—'
-  const alt = pos?.altitude_km ?? pos?.altitude ?? sat?.altitude_km ?? null
-  const vel = pos?.velocity_kms ?? pos?.velocity ?? null
-  const type = sat?.object_type ?? sat?.type ?? '—'
-
-  const typeColor =
-    {
-      payload: 'var(--space-green)',
-      debris: 'var(--space-red)',
-      'rocket body': 'var(--space-amber)',
-    }[(type || '').toLowerCase()] ?? 'var(--space-text-muted)'
-
-  return (
-    <div
-      id="selected-satellite-panel"
-      style={{
-        position: 'absolute',
-        bottom: '1.25rem',
-        left: '1.25rem',
-        background: 'rgba(5,5,12,0.88)',
-        border: '1px solid var(--space-cyan)',
-        borderRadius: 'var(--radius-lg)',
-        padding: '1rem 1.25rem',
-        minWidth: 230,
-        boxShadow: '0 0 30px rgba(0,212,255,0.15)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        animation: 'fadeIn 0.2s ease forwards',
-        zIndex: 10,
-      }}
-    >
-      {/* Close button */}
-      <button
-        aria-label="Deselect satellite"
-        onClick={onClose}
-        style={{
-          position: 'absolute',
-          top: '0.5rem',
-          right: '0.75rem',
-          color: 'var(--space-text-muted)',
-          fontSize: '1rem',
-          lineHeight: 1,
-        }}
-      >
-        ✕
-      </button>
-
-      <div
-        className="gradient-text"
-        style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '0.6rem' }}
-      >
-        SELECTED SATELLITE
-      </div>
-
+      {/* ── Bottom 30%: StatsCards + SatelliteInfo ─────────────────────────── */}
       <div
         style={{
-          fontSize: '0.95rem',
-          fontWeight: 700,
-          color: 'var(--space-text)',
-          marginBottom: '0.5rem',
-          wordBreak: 'break-word',
-        }}
-      >
-        {name}
-      </div>
-
-      <div
-        style={{
+          flex: '0 0 30%',
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.3rem',
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: '0.75rem',
+          minHeight: 0,
+          borderTop: '1px solid var(--space-border)',
+          background: 'var(--space-bg)',
         }}
       >
-        <InfoRow label="NORAD" value={`#${noradId}`} />
-        <InfoRow
-          label="TYPE"
-          value={type}
-          color={typeColor}
-        />
-        <InfoRow
-          label="ALTITUDE"
-          value={alt != null ? `${Number(alt).toFixed(0)} km` : '—'}
-          color="var(--space-cyan)"
-        />
-        <InfoRow
-          label="VELOCITY"
-          value={vel != null ? `${Number(vel).toFixed(2)} km/s` : '—'}
-          color="var(--space-amber)"
-        />
+        <StatsCards stats={stats} />
+
+        <div style={{ flex: 1, padding: '0 1rem 1rem', minHeight: 0 }}>
+          <SatelliteInfo noradId={selectedNoradId} />
+        </div>
       </div>
     </div>
   )
 }
 
-/**
- * @param {{ label: string, value: string, color?: string }} props
- */
-function InfoRow({ label, value, color = 'var(--space-text)' }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-      <span style={{ color: 'var(--space-text-muted)' }}>{label}</span>
-      <span style={{ color, fontWeight: 600 }}>{value}</span>
-    </div>
-  )
-}
+// ── AlertsView ────────────────────────────────────────────────────────────────
 
-/** Colour legend for satellite types */
-function Legend() {
-  const items = [
-    { label: 'Payload', color: '#00ff9d' },
-    { label: 'Debris', color: '#ff4d4d' },
-    { label: 'Rocket Body', color: '#ff9d00' },
-    { label: 'Unknown', color: '#888888' },
-  ]
+/**
+ * Alerts mode: full-width AlertPanel + AlertDetail slide-out.
+ *
+ * @param {{ conjunctions: Object[] }} props
+ */
+function AlertsView({ conjunctions }) {
+  const { activeAlert, setActiveAlert } = useAppContext()
 
   return (
     <div
-      id="globe-legend"
+      id="alerts-view"
       style={{
-        position: 'absolute',
-        top: '1rem',
-        right: '1rem',
-        background: 'rgba(5,5,12,0.75)',
-        border: '1px solid var(--space-border-bright)',
-        borderRadius: 'var(--radius-md)',
-        padding: '0.6rem 0.85rem',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.35rem',
-        pointerEvents: 'none',
+        height: 'calc(100vh - var(--header-height))',
+        overflow: 'auto',
+        padding: '1rem',
+        background: 'var(--space-bg)',
       }}
     >
-      <div
-        style={{
-          fontSize: '0.62rem',
-          color: 'var(--space-text-dim)',
-          fontWeight: 600,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          marginBottom: '0.15rem',
-        }}
-      >
-        Legend
-      </div>
-      {items.map(({ label, color }) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: color,
-              boxShadow: `0 0 6px ${color}`,
-              flexShrink: 0,
-            }}
-          />
-          <span style={{ fontSize: '0.7rem', color: 'var(--space-text-muted)' }}>{label}</span>
-        </div>
-      ))}
+      <AlertPanel
+        conjunctions={conjunctions}
+        onSelect={(c) => setActiveAlert(c)}
+      />
+
+      {activeAlert && (
+        <AlertDetail
+          conjunction={activeAlert}
+          onClose={() => setActiveAlert(null)}
+        />
+      )}
     </div>
   )
 }
@@ -398,26 +295,57 @@ function Legend() {
 // ── App Root ──────────────────────────────────────────────────────────────────
 
 /**
- * Root application component. Wraps the entire app in AppProvider context
- * and renders the MainLayout shell with the live 3D globe dashboard.
- *
- * @returns {JSX.Element}
+ * Inner app — rendered inside AppProvider so useAppContext works.
  */
-function App() {
-  // Ref to OrbitControls so App-level "Reset Camera" button can call reset()
+function AppInner() {
   const controlsRef = useRef(null)
+  const [stats, setStats]               = useState(/** @type {Object|null} */ (null))
+  const [conjunctions, setConjunctions] = useState(/** @type {Object[]} */ ([]))
 
   const handleResetCamera = useCallback(() => {
-    const controls = controlsRef.current
-    if (!controls) return
-    controls.reset()
+    controlsRef.current?.reset()
+  }, [])
+
+  // Fetch dashboard stats on mount
+  useEffect(() => {
+    fetchStats()
+      .then(setStats)
+      .catch((e) => console.error('[App] fetchStats error:', e))
+  }, [])
+
+  // Fetch conjunctions on mount
+  useEffect(() => {
+    fetchConjunctions()
+      .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+      .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
 
   return (
+    <MainLayout onResetCamera={handleResetCamera}>
+      {({ activeView }) => {
+        if (activeView === 'alerts') {
+          return <AlertsView conjunctions={conjunctions} />
+        }
+        return (
+          <GlobeView
+            onResetCamera={handleResetCamera}
+            controlsRef={controlsRef}
+            stats={stats}
+          />
+        )
+      }}
+    </MainLayout>
+  )
+}
+
+/**
+ * Root component — wraps the app in AppProvider.
+ * @returns {JSX.Element}
+ */
+function App() {
+  return (
     <AppProvider>
-      <MainLayout onResetCamera={handleResetCamera}>
-        <GlobeDashboard onResetCamera={handleResetCamera} controlsRef={controlsRef} />
-      </MainLayout>
+      <AppInner />
     </AppProvider>
   )
 }

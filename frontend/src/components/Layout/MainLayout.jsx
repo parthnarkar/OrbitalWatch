@@ -1,6 +1,6 @@
 /**
  * @fileoverview MainLayout — root layout shell for OrbitalWatch.
- * Composes the fixed Sidebar with the scrollable main content area.
+ * F3 update: exposes activeView state, passes alertCount + connected to Sidebar.
  */
 
 import { useState } from 'react'
@@ -11,27 +11,43 @@ import useWebSocket from '../../hooks/useWebSocket.js'
 
 /**
  * @param {Object} props
- * @param {import('react').ReactNode} props.children
- * @param {Function} [props.onResetCamera] Called when the Reset Camera button is pressed
+ * @param {import('react').ReactNode} props.children - Render prop or node; receives { activeView }
+ * @param {Function} [props.onResetCamera]
+ * @param {Function} [props.onNavChange] - Notified when active nav changes
  * @returns {JSX.Element}
  */
-function MainLayout({ children, onResetCamera }) {
+function MainLayout({ children, onResetCamera, onNavChange }) {
   const [activeNav, setActiveNav] = useState('dashboard')
-  const { connected } = useWebSocket()
+  const { connected, alerts } = useWebSocket()
+
+  const handleNavChange = (id) => {
+    setActiveNav(id)
+    onNavChange?.(id)
+  }
+
+  // Map nav id → view name for consumers
+  const VIEW_MAP = {
+    dashboard: 'globe',
+    satellites: 'globe',
+    search: 'globe',
+    alerts: 'alerts',
+  }
+  const activeView = VIEW_MAP[activeNav] ?? 'globe'
 
   return (
     <div
       id="main-layout"
-      style={{
-        display: 'flex',
-        minHeight: '100vh',
-        background: 'var(--space-bg)',
-      }}
+      style={{ display: 'flex', minHeight: '100vh', background: 'var(--space-bg)' }}
     >
-      {/* ── Fixed Sidebar ────────────────────────────────────────────────────── */}
-      <Sidebar activeNav={activeNav} onNavChange={setActiveNav} />
+      {/* ── Fixed Sidebar ──────────────────────────────────────────────────────── */}
+      <Sidebar
+        activeNav={activeNav}
+        onNavChange={handleNavChange}
+        alertCount={alerts?.length ?? 0}
+        connected={connected}
+      />
 
-      {/* ── Main Area (offset by sidebar width) ──────────────────────────────── */}
+      {/* ── Main Area ──────────────────────────────────────────────────────────── */}
       <div
         style={{
           flex: 1,
@@ -42,19 +58,10 @@ function MainLayout({ children, onResetCamera }) {
           minWidth: 0,
         }}
       >
-        {/* Sticky header */}
         <Header connected={connected} onResetCamera={onResetCamera} />
 
-        {/* Page content — no padding for the globe so it fills the viewport */}
-        <main
-          id="main-content"
-          role="main"
-          style={{
-            flex: 1,
-            overflow: 'hidden',
-          }}
-        >
-          {children}
+        <main id="main-content" role="main" style={{ flex: 1, overflow: 'hidden' }}>
+          {typeof children === 'function' ? children({ activeView, activeNav }) : children}
         </main>
       </div>
     </div>
@@ -62,12 +69,14 @@ function MainLayout({ children, onResetCamera }) {
 }
 
 MainLayout.propTypes = {
-  children: PropTypes.node.isRequired,
-  onResetCamera: PropTypes.func,
+  children:       PropTypes.oneOfType([PropTypes.node, PropTypes.func]).isRequired,
+  onResetCamera:  PropTypes.func,
+  onNavChange:    PropTypes.func,
 }
 
 MainLayout.defaultProps = {
   onResetCamera: null,
+  onNavChange:   null,
 }
 
 export default MainLayout
