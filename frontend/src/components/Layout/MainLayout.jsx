@@ -4,15 +4,18 @@
  */
 
 import { useState } from 'react'
+import PropTypes from 'prop-types'
 import Sidebar from './Sidebar.jsx'
 import Header from './Header.jsx'
 import useWebSocket from '../../hooks/useWebSocket.js'
 
 /**
- * @param {{ children: import('react').ReactNode }} props
+ * @param {Object} props
+ * @param {import('react').ReactNode} props.children
+ * @param {Function} [props.onResetCamera] Called when the Reset Camera button is pressed
  * @returns {JSX.Element}
  */
-function MainLayout({ children }) {
+function MainLayout({ children, onResetCamera }) {
   const [activeNav, setActiveNav] = useState('dashboard')
   const { connected } = useWebSocket()
 
@@ -40,16 +43,15 @@ function MainLayout({ children }) {
         }}
       >
         {/* Sticky header */}
-        <Header connected={connected} />
+        <Header connected={connected} onResetCamera={onResetCamera} />
 
-        {/* Scrollable page content */}
+        {/* Page content — no padding for the globe so it fills the viewport */}
         <main
           id="main-content"
           role="main"
           style={{
             flex: 1,
-            overflowY: 'auto',
-            padding: '1.5rem',
+            overflow: 'hidden',
           }}
         >
           {children}
@@ -57,6 +59,15 @@ function MainLayout({ children }) {
       </div>
     </div>
   )
+}
+
+MainLayout.propTypes = {
+  children: PropTypes.node.isRequired,
+  onResetCamera: PropTypes.func,
+}
+
+MainLayout.defaultProps = {
+  onResetCamera: null,
 }
 
 export default MainLayout

@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import PropTypes from 'prop-types'
 import { searchSatellites } from '../../services/api.js'
 import { useAppContext } from '../../context/AppContext.jsx'
 
@@ -45,10 +46,10 @@ const BellIcon = () => (
 // ── Header Component ──────────────────────────────────────────────────────────
 
 /**
- * @param {{ connected: boolean }} props
+ * @param {{ connected: boolean, onResetCamera?: Function }} props
  * @returns {JSX.Element}
  */
-function Header({ connected }) {
+function Header({ connected, onResetCamera }) {
   const { activeAlert } = useAppContext()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -230,6 +231,39 @@ function Header({ connected }) {
           </div>
         )}
 
+        {/* Reset Camera button */}
+        {onResetCamera && (
+          <button
+            id="btn-reset-camera-header"
+            aria-label="Reset camera view"
+            onClick={onResetCamera}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              padding: '0.375rem 0.75rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--space-card)',
+              border: '1px solid var(--space-border)',
+              color: 'var(--space-text-muted)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              letterSpacing: '0.03em',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--space-cyan)'
+              e.currentTarget.style.borderColor = 'rgba(0,212,255,0.35)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--space-text-muted)'
+              e.currentTarget.style.borderColor = 'var(--space-border)'
+            }}
+          >
+            ↺ Reset Camera
+          </button>
+        )}
+
         {/* Notification bell */}
         <button
           id="btn-notifications"
@@ -293,6 +327,11 @@ function Header({ connected }) {
       </div>
     </header>
   )
+}
+
+Header.propTypes = {
+  connected: PropTypes.bool.isRequired,
+  onResetCamera: PropTypes.func,
 }
 
 export default Header

@@ -12,12 +12,14 @@ import WebSocketService from '../services/websocket.js'
  *   positions: import('../types/satellite.js').SatellitePosition[],
  *   alerts: import('../types/satellite.js').Alert[],
  *   connected: boolean,
+ *   lastUpdate: Date | null,
  * }}
  */
 function useWebSocket() {
   const [positions, setPositions] = useState([])
   const [alerts, setAlerts] = useState([])
   const [connected, setConnected] = useState(false)
+  const [lastUpdate, setLastUpdate] = useState(/** @type {Date|null} */ (null))
 
   // Use a ref to avoid re-creating the service on every render
   const wsRef = useRef(/** @type {WebSocketService | null} */ (null))
@@ -47,8 +49,9 @@ function useWebSocket() {
      */
     const handlePositions = (newPositions) => {
       if (!Array.isArray(newPositions)) return
-      // Replace the entire positions snapshot (server sends full batch)
+      // Replace the entire positions snapshot immutably (server sends full batch)
       setPositions([...newPositions])
+      setLastUpdate(new Date())
     }
 
     ws.on('satellite_positions', handlePositions)
@@ -77,7 +80,7 @@ function useWebSocket() {
     }
   }, []) // run once on mount
 
-  return { positions, alerts, connected }
+  return { positions, alerts, connected, lastUpdate }
 }
 
 export default useWebSocket
