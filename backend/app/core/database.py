@@ -1,0 +1,31 @@
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+
+from sqlalchemy import MetaData
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base
+
+from app.core.config import settings
+
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
+AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+Base = declarative_base(metadata=MetaData())
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def init_db() -> None:
+    from app.models import conjunction  # noqa: F401
+    from app.models import satellite  # noqa: F401
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
