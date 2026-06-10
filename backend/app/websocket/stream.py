@@ -1,0 +1,92 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+
+import socketio
+from redis.asyncio import Redis
+from sqlalchemy import select
+
+from app.core.config import settings
+from app.core.database import AsyncSessionLocal
+from app.models.satellite import SatelliteModel
+from app.services.propagation import propagate_satellite
+from app.websocket.manager import manager
+
+logger = logging.getLogger(__name__)
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=settings.CORS_ORIGINS)
+
+
+@sio.on("connect")
+async def connect(sid: str, environ: dict) -> None:
+    await manager.connect(sid, environ)
+    await sio.emit("connected", {"status": "ok"}, to=sid)
+
+
+@sio.on("disconnect")
+async def disconnect(sid: str) -> None:
+    await manager.disconnect(sid)
+
+
+@sio.on("subscribe_satellites")
+async def subscribe_satellites(sid: str, data: dict | None = None) -> None:
+    await sio.emit("subscription_updated", {"status": "ok", "norad_ids": (data or {}).get("norad_ids", [])}, to=sid)
+
+
+async def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
+    position = await asyncio.to_thread(propagate_satellite, satellite)
+    if position is None:
+        return None
+    return {
+        "norad_id": satellite.norad_id,
+        "name": satellite.name,
+        "lat": position["latitude"],
+        "lon": position["longitude"],
+        "alt": position["altitude_km"],
+        "latitude": position["latitude"],
+        "longitude": position["longitude"],
+        "altitude_km": position["altitude_km"],
+        "velocity_kms": position["velocity_kms"],
+        "timestamp": position["timestamp"].isoformat(),
+        "type": satellite.object_type,
+        "object_type": satellite.object_type,
+    }
+
+
+async def broadcast_positions() -> None:
+    while True:
+        try:
+            async with AsyncSessionLocal() as session:
+                result = await session.execute(select(SatelliteModel).limit(500))
+                satellites = list(result.scalars().all())
+            payloads = await asyncio.gather(*[_position_payload(satellite) for satellite in satellites])
+            data = [payload for payload in payloads if payload is not None]
+            if manager.get_active_connections():
+                await sio.emit("satellite_positions", {"event": "satellite_positions", "data": data})
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Position broadcast failed")
+        await asyncio.sleep(60)
+
+
+async def listen_for_alerts(redis: Redis | None) -> None:
+    while True:
+        if redis is None:
+            await asyncio.sleep(10)
+            continue
+        try:
+            pubsub = redis.pubsub()
+            await pubsub.subscribe("new_alerts")
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                raw = message.get("data")
+                data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+                await sio.emit("new_alert", data)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Redis alert listener failed; retrying")
+            await asyncio.sleep(5)
