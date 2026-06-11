@@ -1,18 +1,17 @@
 /**
  * @fileoverview MainLayout — root layout shell for OrbitalWatch.
- * F5 update: wires DemoMode toggle to Header, adds MobileSheet.
+ * Redesigned: sidebar removed, globe takes full width.
  */
 
 import PropTypes from 'prop-types'
-import Sidebar from './Sidebar.jsx'
 import Header from './Header.jsx'
 import MobileSheet from './MobileSheet.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 
 /**
  * @param {Object} props
- * @param {import('react').ReactNode | Function} props.children - Render prop receives { activeView, activeNav }
- * @param {Function} [props.onNavChange] - Notified when active nav changes
+ * @param {import('react').ReactNode | Function} props.children
+ * @param {Function} [props.onNavChange]
  * @param {boolean}  [props.demoEnabled]
  * @param {Function} [props.onToggleDemo]
  * @returns {JSX.Element}
@@ -28,57 +27,40 @@ function MainLayout({ children, onNavChange, demoEnabled, onToggleDemo }) {
   return (
     <div
       id="main-layout"
-      style={{ display: 'flex', minHeight: '100vh', background: 'var(--space-bg)' }}
+      style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#000000' }}
     >
-      {/* ── Fixed Sidebar (hidden on mobile via CSS) ──────────────────────────── */}
-      <Sidebar
+      {/* ── Sticky Header ─────────────────────────────────────────────────────── */}
+      <Header
+        connected={connected}
+        demoEnabled={demoEnabled}
+        onToggleDemo={onToggleDemo}
         activeNav={activeNav}
         onNavChange={handleNavChange}
         alertCount={alerts?.length ?? 0}
-        connected={connected}
       />
 
-      {/* ── Main Area ──────────────────────────────────────────────────────────── */}
-      <div
-        style={{
-          flex: 1,
-          marginLeft: 'var(--sidebar-width)',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: '100vh',
-          minWidth: 0,
-        }}
-      >
-        <Header
-          connected={connected}
-          demoEnabled={demoEnabled}
-          onToggleDemo={onToggleDemo}
-        />
+      {/* ── Full-width Main Area ──────────────────────────────────────────────── */}
+      <main id="main-content" role="main" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {typeof children === 'function' ? children({ activeView, activeNav }) : children}
+      </main>
 
-        <main id="main-content" role="main" style={{ flex: 1 }}>
-          {typeof children === 'function' ? children({ activeView, activeNav }) : children}
-        </main>
-      </div>
-
-      {/* ── Mobile Bottom Sheet (visible only on < 768px via CSS) ─────────────── */}
-      <MobileSheet
-        alertCount={alerts?.length ?? 0}
-      />
+      {/* ── Mobile Bottom Sheet ───────────────────────────────────────────────── */}
+      <MobileSheet alertCount={alerts?.length ?? 0} />
     </div>
   )
 }
 
 MainLayout.propTypes = {
-  children:      PropTypes.oneOfType([PropTypes.node, PropTypes.func]).isRequired,
-  onNavChange:   PropTypes.func,
-  demoEnabled:   PropTypes.bool,
-  onToggleDemo:  PropTypes.func,
+  children:     PropTypes.oneOfType([PropTypes.node, PropTypes.func]).isRequired,
+  onNavChange:  PropTypes.func,
+  demoEnabled:  PropTypes.bool,
+  onToggleDemo: PropTypes.func,
 }
 
 MainLayout.defaultProps = {
-  onNavChange:   null,
-  demoEnabled:   false,
-  onToggleDemo:  null,
+  onNavChange:  null,
+  demoEnabled:  false,
+  onToggleDemo: null,
 }
 
 export default MainLayout

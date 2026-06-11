@@ -1,6 +1,7 @@
 /**
  * @fileoverview App.jsx — Root application component for OrbitalWatch.
- * Wired with charts, FilterBar, live stats, and toast alerts.
+ * Redesigned: full-screen globe, floating left filter panel,
+ * top-right camera controls, bottom stats bar.
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
@@ -11,169 +12,392 @@ import ThreeGlobe from './components/Globe/ThreeGlobe.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 // Dashboard components
-import SearchBar         from './components/Dashboard/SearchBar.jsx'
-import SatelliteInfo     from './components/Dashboard/SatelliteInfo.jsx'
-import StatsCards        from './components/Dashboard/StatsCards.jsx'
-import AlertPanel        from './components/Dashboard/AlertPanel.jsx'
-import AlertDetail       from './components/Dashboard/AlertDetail.jsx'
-import FilterBar         from './components/Dashboard/FilterBar.jsx'
-import AltitudeChart     from './components/Dashboard/AltitudeChart.jsx'
-import TypeDistribution  from './components/Dashboard/TypeDistribution.jsx'
+import SatelliteInfo    from './components/Dashboard/SatelliteInfo.jsx'
+import StatsCards       from './components/Dashboard/StatsCards.jsx'
+import AlertPanel       from './components/Dashboard/AlertPanel.jsx'
+import AlertDetail      from './components/Dashboard/AlertDetail.jsx'
+import AltitudeChart    from './components/Dashboard/AltitudeChart.jsx'
+import TypeDistribution from './components/Dashboard/TypeDistribution.jsx'
 import DemoMode, { useDemoMode } from './components/Dashboard/DemoMode.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
 import { fetchStats, fetchConjunctions } from './services/api.js'
 import './index.css'
 
-// ── Reset Camera Icon ─────────────────────────────────────────────────────────
+// ── Satellite type color map ──────────────────────────────────────────────────
+
+const TYPE_COLORS = {
+  payload:      '#00ff9d',
+  debris:       '#ff4d4d',
+  'rocket body': '#ff9d00',
+  unknown:      '#888888',
+}
+
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+
+const TargetIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="3" />
+    <line x1="12" y1="2" x2="12" y2="7" />
+    <line x1="12" y1="17" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="7" y2="12" />
+    <line x1="17" y1="12" x2="22" y2="12" />
+  </svg>
+)
 
 const ResetIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
     <path d="M3 3v5h5" />
   </svg>
 )
 
-// ── StatChip (globe overlay) ──────────────────────────────────────────────────
+const ChevronDown = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+)
 
-/** @param {{ label: string, value: string, color: string }} props */
-function StatChip({ label, value, color }) {
+// ── Floating Left Panel (Filters + Legend) ────────────────────────────────────
+
+/**
+ * @param {{ stats: Object, filters: Object, onChange: Function, satellites: Array }} props
+ */
+function FloatingFilterPanel({ stats, filters, onChange, satellites }) {
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [legendOpen, setLegendOpen] = useState(false)
+
+  const ALL_TYPES = ['payload', 'debris', 'rocket body', 'unknown']
+
+  const activeTypes = filters?.types ?? ALL_TYPES
+
+  const handleTypeToggle = (type) => {
+    const next = activeTypes.includes(type)
+      ? activeTypes.filter((t) => t !== type)
+      : [...activeTypes, type]
+    onChange({ ...filters, types: next })
+  }
+
+  // Count satellites per type from live positions
+  const counts = {}
+  ALL_TYPES.forEach((t) => {
+    counts[t] = satellites.filter((s) => {
+      const type = (s.type || s.object_type || 'unknown').toLowerCase().replace('rocket_body', 'rocket body')
+      return type === t
+    }).length
+  })
+
+  // Fall back to stats API counts if live counts are 0
+  const totalFromStats = stats?.total_satellites ?? stats?.total ?? 0
+  const debrisFromStats = stats?.debris_count ?? stats?.total_debris ?? stats?.debris ?? 0
+  const totalLive = satellites.length
+
+  // Use API-derived counts when available but live data is minimal
+  const getCount = (type) => {
+    if (totalLive > 10) return counts[type]
+    if (type === 'debris') return debrisFromStats
+    return counts[type]
+  }
+
   return (
     <div
+      id="floating-filter-panel"
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        background: 'rgba(5,5,12,0.75)',
-        border: '1px solid var(--space-border-bright)',
-        borderRadius: 'var(--radius-md)',
-        padding: '0.35rem 0.7rem',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        minWidth: 70,
+        position: 'absolute',
+        left: 24,
+        top: 80,
+        width: 180,
+        background: 'rgba(10,10,18,0.88)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderRadius: '14px',
+        border: '1px solid #1a1a2e',
+        overflow: 'hidden',
+        zIndex: 40,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
       }}
     >
-      <span style={{ fontSize: '1rem', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
-        {value}
-      </span>
-      <span style={{ fontSize: '0.62rem', color: 'var(--space-text-dim)', fontWeight: 500, letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 2 }}>
-        {label}
-      </span>
+      {/* Filters header button */}
+      <button
+        onClick={() => setFiltersOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.625rem 0.875rem',
+          background: 'rgba(255,255,255,0.03)',
+          border: 'none',
+          borderBottom: filtersOpen ? '1px solid #1a1a2e' : 'none',
+          color: '#e8e8f0',
+          fontSize: '0.8rem',
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+          cursor: 'pointer',
+          transition: 'background 150ms ease',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.85rem' }}>⚙</span>
+          Filters
+        </span>
+        <span style={{ opacity: 0.6, transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+          <ChevronDown />
+        </span>
+      </button>
+
+      {/* Type list */}
+      {filtersOpen && (
+        <div style={{ padding: '0.5rem 0' }}>
+          {ALL_TYPES.map((type) => {
+            const isActive = activeTypes.includes(type)
+            const color = TYPE_COLORS[type]
+            const count = getCount(type)
+            const label = type === 'rocket body' ? 'Rocket Body' : type.charAt(0).toUpperCase() + type.slice(1)
+            return (
+              <button
+                key={type}
+                onClick={() => handleTypeToggle(type)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.45rem 0.875rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  opacity: isActive ? 1 : 0.38,
+                  transition: 'opacity 150ms ease, background 150ms ease',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                title={`${isActive ? 'Hide' : 'Show'} ${label}`}
+              >
+                {/* Colored dot */}
+                <div
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: color,
+                    boxShadow: isActive ? `0 0 6px ${color}` : 'none',
+                    flexShrink: 0,
+                    transition: 'box-shadow 150ms ease',
+                  }}
+                />
+                <span style={{ flex: 1, textAlign: 'left', fontSize: '0.78rem', color: '#e8e8f0', fontWeight: 500 }}>
+                  {label}
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#5a5a80', fontVariantNumeric: 'tabular-nums' }}>
+                  {count > 0 ? count.toLocaleString() : '—'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* View Legend toggle */}
+      <button
+        onClick={() => setLegendOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.55rem 0.875rem',
+          background: 'rgba(255,255,255,0.02)',
+          border: 'none',
+          borderTop: '1px solid #1a1a2e',
+          color: '#8a8ab0',
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          cursor: 'pointer',
+          transition: 'background 150ms ease',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
+      >
+        <span>View Legend</span>
+        <span style={{ opacity: 0.6, transform: legendOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+          <ChevronDown />
+        </span>
+      </button>
+
+      {/* Legend dropdown */}
+      {legendOpen && (
+        <div style={{ padding: '0.5rem 0.875rem 0.625rem', borderTop: '1px solid #1a1a2e' }}>
+          {[
+            { label: 'Payload',      color: '#00ff9d', desc: 'Active satellites' },
+            { label: 'Debris',       color: '#ff4d4d', desc: 'Space debris' },
+            { label: 'Rocket Body',  color: '#ff9d00', desc: 'Rocket stages' },
+            { label: 'Unknown',      color: '#888888', desc: 'Unclassified' },
+          ].map(({ label, color, desc }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.2rem 0' }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 5px ${color}`, flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '0.72rem', color: '#e8e8f0', fontWeight: 500, lineHeight: 1.2 }}>{label}</span>
+                <span style={{ fontSize: '0.62rem', color: '#5a5a80' }}>{desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
-StatChip.propTypes = {
-  label: PropTypes.string.isRequired,
-  value: PropTypes.string.isRequired,
-  color: PropTypes.string.isRequired,
+FloatingFilterPanel.propTypes = {
+  stats:      PropTypes.object,
+  filters:    PropTypes.object.isRequired,
+  onChange:   PropTypes.func.isRequired,
+  satellites: PropTypes.array.isRequired,
 }
 
-// ── Legend ────────────────────────────────────────────────────────────────────
+FloatingFilterPanel.defaultProps = { stats: null }
 
-function Legend() {
-  const items = [
-    { label: 'Payload',      color: '#00ff9d' },
-    { label: 'Debris',       color: '#ff4d4d' },
-    { label: 'Rocket Body',  color: '#ff9d00' },
-    { label: 'Unknown',      color: '#888888' },
-  ]
+// ── Top-Right Camera Controls ─────────────────────────────────────────────────
+
+function CameraControls({ onCenter, onReset }) {
   return (
     <div
-      id="globe-legend"
       style={{
         position: 'absolute',
-        top: '1rem',
-        right: '1rem',
-        background: 'rgba(5,5,12,0.75)',
-        border: '1px solid var(--space-border-bright)',
-        borderRadius: 'var(--radius-md)',
-        padding: '0.6rem 0.85rem',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        right: 24,
+        top: 80,
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.35rem',
-        pointerEvents: 'none',
+        gap: '0.5rem',
+        zIndex: 40,
       }}
     >
-      <div style={{ fontSize: '0.62rem', color: 'var(--space-text-dim)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.15rem' }}>
-        Legend
-      </div>
-      {items.map(({ label, color }) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }} />
-          <span style={{ fontSize: '0.7rem', color: 'var(--space-text-muted)' }}>{label}</span>
-        </div>
+      {[
+        { id: 'btn-center-camera', label: 'Center on satellite', icon: <TargetIcon />, onClick: onCenter, title: 'Center' },
+        { id: 'btn-reset-camera',  label: 'Reset camera view',   icon: <ResetIcon />,  onClick: onReset,  title: 'Reset'  },
+      ].map(({ id, label, icon, onClick, title }) => (
+        <button
+          key={id}
+          id={id}
+          aria-label={label}
+          title={label}
+          onClick={onClick}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#0f0f1a',
+            border: '1px solid #1a1a2e',
+            color: '#8a8ab0',
+            cursor: 'pointer',
+            transition: 'all 150ms ease',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+            gap: '0.1rem',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#1a1a2e'
+            e.currentTarget.style.color = '#e8e8f0'
+            e.currentTarget.style.borderColor = '#2a2a4a'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#0f0f1a'
+            e.currentTarget.style.color = '#8a8ab0'
+            e.currentTarget.style.borderColor = '#1a1a2e'
+          }}
+        >
+          {icon}
+          <span style={{ fontSize: '0.48rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, lineHeight: 1, marginTop: 2 }}>
+            {title}
+          </span>
+        </button>
       ))}
     </div>
   )
 }
 
+CameraControls.propTypes = {
+  onCenter: PropTypes.func.isRequired,
+  onReset:  PropTypes.func.isRequired,
+}
+
 // ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
- * Globe mode: ThreeGlobe + SearchBar overlay + StatsCards + SatelliteInfo + Charts.
- *
- * @param {{ onResetCamera: Function, controlsRef: Object, stats: Object }} props
+ * Full-screen globe view with floating panels.
  */
 function GlobeView({ onResetCamera, controlsRef, stats }) {
-  const { satellites, loading: satLoading } = useSatellites()
+  const { satellites: allSatellites, loading: satLoading } = useSatellites()
   const {
-    connected,
-    lastUpdate,
     filteredSatellites,
     filters,
     setFilters,
+    selectedSatellite,
     setSelectedSatellite,
   } = useAppContext()
 
-  const [selectedNoradId, setSelectedNoradId] = useState(/** @type {string|null} */ (null))
+  const [selectedNoradId, setSelectedNoradId] = useState(null)
+
+  // Sync selectedNoradId when selectedSatellite changes in context (e.g. from SearchBar in Header)
+  useEffect(() => {
+    if (selectedSatellite) {
+      setSelectedNoradId(String(selectedSatellite.norad_id))
+    } else {
+      setSelectedNoradId(null)
+    }
+  }, [selectedSatellite])
 
   const handleSelect = useCallback((noradId) => {
-    setSelectedNoradId((prev) => (prev === noradId ? null : noradId))
-    // sync to context
-    const sat = satellites.find((s) => String(s.norad_id) === String(noradId))
-    setSelectedSatellite(sat ?? null)
-  }, [satellites, setSelectedSatellite])
+    setSelectedSatellite((prev) => {
+      if (prev && String(prev.norad_id) === String(noradId)) {
+        return null
+      }
+      return allSatellites.find((s) => String(s.norad_id) === String(noradId)) ?? null
+    })
+  }, [allSatellites, setSelectedSatellite])
 
-  // SearchBar selection → set selectedNoradId to focus globe
-  const handleSearchSelect = useCallback((sat) => {
-    const id = String(sat.norad_id)
-    setSelectedNoradId(id)
-    setSelectedSatellite(sat)
-  }, [setSelectedSatellite])
+  const handleCenter = useCallback(() => {
+    if (selectedNoradId && controlsRef.current) {
+      window.dispatchEvent(new CustomEvent('ow:follow-satellite'))
+    }
+  }, [selectedNoradId, controlsRef])
 
   // Listen for 3D preview event from AlertDetail
   useEffect(() => {
     const handler = (e) => {
       const { norad1 } = e.detail ?? {}
-      if (norad1) setSelectedNoradId(String(norad1))
+      if (norad1) {
+        const sat = allSatellites.find((s) => String(s.norad_id) === String(norad1))
+        setSelectedSatellite(sat ?? null)
+      }
     }
     window.addEventListener('ow:focus-conjunction', handler)
     return () => window.removeEventListener('ow:focus-conjunction', handler)
-  }, [])
+  }, [allSatellites, setSelectedSatellite])
 
   return (
     <div
       id="globe-dashboard"
       style={{
         position: 'relative',
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        width: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
       }}
     >
-      {/* FilterBar above ThreeGlobe */}
-      <div style={{ padding: '8px 16px', background: 'var(--space-bg)' }}>
-        <FilterBar filters={filters} onChange={setFilters} />
-      </div>
-
-      {/* ── Globe (top ~70%) ───────────────────────────────────────────────── */}
+      {/* ── Full-screen Globe ──────────────────────────────────────────────────── */}
       <div className="globe-container">
         <ErrorBoundary label="3D Globe">
           <ThreeGlobe
-            satellites={satellites}
+            satellites={allSatellites}
             positions={filteredSatellites}
             selectedNoradId={selectedNoradId}
             onSelect={handleSelect}
@@ -181,175 +405,100 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
           />
         </ErrorBoundary>
 
-        {/* SearchBar overlay – top centre */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '1rem',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '90%',
-            maxWidth: 520,
-            zIndex: 20,
-          }}
-        >
-          <SearchBar onSelect={handleSearchSelect} />
-        </div>
+        {/* Floating left panel — filters */}
+        <FloatingFilterPanel
+          stats={stats}
+          filters={filters}
+          onChange={setFilters}
+          satellites={filteredSatellites}
+        />
 
-        {/* Stats strip – top left */}
-        <div
-          style={{
-            position: 'absolute',
-            top: '4.5rem',
-            left: '1rem',
-            display: 'flex',
-            gap: '0.75rem',
-            flexWrap: 'wrap',
-            pointerEvents: 'none',
-          }}
-        >
-          <StatChip label="Tracked"       value={satLoading ? '…' : satellites.length.toLocaleString()} color="var(--space-cyan)" />
-          <StatChip label="Live Positions" value={filteredSatellites.length.toLocaleString()} color="var(--space-green)" />
-          <StatChip label="Stream"         value={connected ? 'LIVE' : 'OFFLINE'} color={connected ? 'var(--space-green)' : 'var(--space-red)'} />
-          {lastUpdate && <StatChip label="Updated" value={lastUpdate.toLocaleTimeString()} color="var(--space-text-muted)" />}
-        </div>
+        {/* Top-right camera controls */}
+        <CameraControls
+          onCenter={handleCenter}
+          onReset={onResetCamera}
+        />
 
-        <Legend />
-
-        {/* Reset camera button */}
-        <button
-          id="btn-reset-camera"
-          aria-label="Reset camera view"
-          onClick={onResetCamera}
-          style={{
-            position: 'absolute',
-            bottom: '1.25rem',
-            right: '1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.5rem 0.875rem',
-            background: 'rgba(5,5,12,0.8)',
-            border: '1px solid var(--space-border-bright)',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--space-text-muted)',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            transition: 'all var(--transition-fast)',
-            cursor: 'pointer',
-            zIndex: 10,
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = 'var(--space-cyan)'
-            e.currentTarget.style.borderColor = 'rgba(0,212,255,0.4)'
-            e.currentTarget.style.boxShadow = '0 0 12px rgba(0,212,255,0.15)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = 'var(--space-text-muted)'
-            e.currentTarget.style.borderColor = 'var(--space-border-bright)'
-            e.currentTarget.style.boxShadow = 'none'
-          }}
-        >
-          <ResetIcon />
-          Reset Camera
-        </button>
-      </div>
-
-      {/* ── Bottom: StatsCards + SatelliteInfo + Charts ─────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          borderTop: '1px solid var(--space-border)',
-          background: 'var(--space-bg)',
-          gap: '1rem',
-          paddingBottom: '2rem',
-        }}
-      >
-        <StatsCards stats={stats} />
-
-        <div
-          style={{
-            padding: '0 1rem',
-            display: 'flex',
-            gap: '1rem',
-            flexWrap: 'wrap',
-          }}
-        >
-          {/* Info Card */}
-          <div style={{ flex: '1 1 300px', minWidth: 280, display: 'flex', flexDirection: 'column' }}>
-            <SatelliteInfo noradId={selectedNoradId} />
-          </div>
-
-          {/* Charts Container */}
+        {/* SatelliteInfo — bottom-left when a satellite is selected */}
+        {selectedNoradId && (
           <div
             style={{
-              flex: '2 1 500px',
-              display: 'flex',
-              gap: '1rem',
-              flexWrap: 'wrap',
+              position: 'absolute',
+              bottom: '1.25rem',
+              left: 24,
+              width: 280,
+              zIndex: 20,
+              maxHeight: '45vh',
+              overflowY: 'auto',
             }}
           >
-            {/* Altitude Chart */}
+            <SatelliteInfo noradId={selectedNoradId} />
+          </div>
+        )}
+
+        {/* Charts — bottom-right, only shown when satellite selected */}
+        {selectedNoradId && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '1.25rem',
+              right: 24,
+              display: 'flex',
+              gap: '0.75rem',
+              zIndex: 20,
+              maxWidth: 480,
+            }}
+          >
             <div
               className="card"
               style={{
-                flex: '1 1 240px',
-                padding: '12px 16px',
-                background: 'var(--space-card, #0f0f1a)',
-                display: 'flex',
-                flexDirection: 'column',
+                flex: 1,
+                padding: '10px 14px',
+                background: 'rgba(10,10,18,0.88)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                minWidth: 200,
               }}
             >
-              <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
+              <h3 style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: '#8a8ab0', marginBottom: 8, letterSpacing: '0.07em' }}>
                 Altitude Distribution
               </h3>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-                <AltitudeChart satellites={filteredSatellites} />
-              </div>
+              <AltitudeChart satellites={filteredSatellites} />
             </div>
-
-            {/* Type Chart */}
             <div
               className="card"
               style={{
-                flex: '1 1 240px',
-                padding: '12px 16px',
-                background: 'var(--space-card, #0f0f1a)',
-                display: 'flex',
-                flexDirection: 'column',
+                flex: 1,
+                padding: '10px 14px',
+                background: 'rgba(10,10,18,0.88)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                minWidth: 200,
               }}
             >
-              <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
+              <h3 style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: '#8a8ab0', marginBottom: 8, letterSpacing: '0.07em' }}>
                 Type Breakdown
               </h3>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-                <TypeDistribution satellites={filteredSatellites} />
-              </div>
+              <TypeDistribution satellites={filteredSatellites} />
             </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* ── Stats Bar (bottom) ──────────────────────────────────────────────────── */}
+      <StatsCards stats={stats} />
     </div>
   )
 }
 
 GlobeView.propTypes = {
   onResetCamera: PropTypes.func.isRequired,
-  controlsRef: PropTypes.object.isRequired,
-  stats: PropTypes.object,
+  controlsRef:   PropTypes.object.isRequired,
+  stats:         PropTypes.object,
 }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
 
-/**
- * Alerts mode: full-width AlertPanel + AlertDetail slide-out.
- *
- * @param {{ conjunctions: Object[] }} props
- */
 function AlertsView({ conjunctions }) {
   const { activeAlert, setActiveAlert } = useAppContext()
 
@@ -360,14 +509,13 @@ function AlertsView({ conjunctions }) {
         padding: '1rem',
         background: 'var(--space-bg)',
         width: '100%',
-        minHeight: 'calc(100vh - var(--header-height))',
+        flex: 1,
       }}
     >
       <AlertPanel
         conjunctions={conjunctions}
         onSelect={(c) => setActiveAlert(c)}
       />
-
       {activeAlert && (
         <AlertDetail
           conjunction={activeAlert}
@@ -384,48 +532,33 @@ AlertsView.propTypes = {
 
 // ── App Root ──────────────────────────────────────────────────────────────────
 
-/**
- * Inner app — rendered inside AppProvider so useAppContext works.
- */
 function AppInner() {
   const controlsRef = useRef(null)
-  const [stats, setStats]               = useState(/** @type {Object|null} */ (null))
-  const [conjunctions, setConjunctions] = useState(/** @type {Object[]} */ ([]))
+  const [stats, setStats]               = useState(null)
+  const [conjunctions, setConjunctions] = useState([])
 
-
-
-  // Demo mode (persisted in localStorage)
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
-
-  // satellites for demo cycling
   const { satellites } = useSatellites()
 
   const handleResetCamera = useCallback(() => {
     controlsRef.current?.reset()
   }, [])
 
-  // Fetch dashboard stats on mount
   useEffect(() => {
     fetchStats()
       .then(setStats)
       .catch((e) => console.error('[App] fetchStats error:', e))
   }, [])
 
-  // Fetch conjunctions on mount
   useEffect(() => {
     fetchConjunctions()
       .then((data) => setConjunctions(Array.isArray(data) ? data : []))
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
 
-
-
   return (
     <>
-      <MainLayout
-        demoEnabled={demoEnabled}
-        onToggleDemo={toggleDemo}
-      >
+      <MainLayout demoEnabled={demoEnabled} onToggleDemo={toggleDemo}>
         {({ activeView }) => {
           if (activeView === 'alerts') {
             return <AlertsView conjunctions={conjunctions} />
@@ -440,23 +573,16 @@ function AppInner() {
         }}
       </MainLayout>
 
-      {/* Demo Mode overlay + cycling logic */}
       <DemoMode
         enabled={demoEnabled}
         onToggle={toggleDemo}
         satellites={satellites}
         conjunctions={conjunctions}
       />
-
-
     </>
   )
 }
 
-/**
- * Root component — wraps the app in AppProvider.
- * @returns {JSX.Element}
- */
 function App() {
   return (
     <AppProvider>

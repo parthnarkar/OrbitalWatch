@@ -1,18 +1,12 @@
 /**
- * @fileoverview StatsCards — 4-card summary strip with live "Last Scan" timer.
+ * @fileoverview StatsCards — Minimal bottom stats bar with live "Last Scan" timer.
  */
 
 import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
-import { Globe, Trash2, AlertTriangle, Clock } from 'lucide-react'
 
 // ── Relative time utility ─────────────────────────────────────────────────────
 
-/**
- * Returns a human-readable relative time string from a timestamp.
- * @param {string | Date | number | null} timestamp
- * @returns {string}
- */
 function relativeTimeAgo(timestamp) {
   if (!timestamp) return '—'
   const diff = Date.now() - new Date(timestamp).getTime()
@@ -26,112 +20,119 @@ function relativeTimeAgo(timestamp) {
   return `${Math.floor(h / 24)}d ago`
 }
 
-// ── StatCard Sub-component ────────────────────────────────────────────────────
+// ── Icon Components ───────────────────────────────────────────────────────────
 
-/**
- * Individual stat card with hover glow.
- *
- * @param {{ icon: JSX.Element, value: string | number, label: string, color?: string, accentColor?: string }} props
- */
-function StatCard({ icon, value, label, color = 'var(--space-text)', accentColor = 'var(--space-cyan)' }) {
+const TrackedIcon = ({ color }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+)
+
+const DebrisIcon = ({ color }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+)
+
+const AlertIcon = ({ color }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+)
+
+const ClockIcon = ({ color }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="12 6 12 12 16 14" />
+  </svg>
+)
+
+TrackedIcon.propTypes = { color: PropTypes.string.isRequired }
+DebrisIcon.propTypes  = { color: PropTypes.string.isRequired }
+AlertIcon.propTypes   = { color: PropTypes.string.isRequired }
+ClockIcon.propTypes   = { color: PropTypes.string.isRequired }
+
+// ── StatColumn Sub-component ──────────────────────────────────────────────────
+
+function StatColumn({ icon, value, label, color, isLast }) {
   const [hovered, setHovered] = useState(false)
 
   return (
     <div
       style={{
         flex: 1,
-        minWidth: 140,
-        background: '#0f0f1a',
-        border: `1px solid ${hovered ? accentColor + '55' : '#1a1a2e'}`,
-        borderRadius: '0.75rem',
-        padding: '1rem',
         display: 'flex',
         alignItems: 'center',
-        gap: '0.875rem',
-        transition: 'border-color var(--transition-base), box-shadow var(--transition-base)',
-        boxShadow: hovered ? `0 0 20px ${accentColor}18` : 'none',
+        justifyContent: 'center',
+        gap: '0.6rem',
+        padding: '0 1.25rem',
+        borderRight: isLast ? 'none' : '1px solid #1a1a2e',
+        background: hovered ? 'rgba(255,255,255,0.02)' : 'transparent',
+        transition: 'background 150ms ease',
         cursor: 'default',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Icon container */}
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: '0.5rem',
-          background: `${accentColor}18`,
-          border: `1px solid ${accentColor}33`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: accentColor,
-          flexShrink: 0,
-          transition: 'background var(--transition-base)',
-        }}
-      >
+      {/* Icon */}
+      <div style={{ flexShrink: 0, opacity: 0.85, display: 'flex', alignItems: 'center' }}>
         {icon}
       </div>
 
-      {/* Text */}
-      <div style={{ minWidth: 0 }}>
-        <div
+      {/* Text Block (Inline for Minimalism) */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
+        <span
           style={{
-            fontSize: '1.375rem',
+            fontSize: '1.125rem',
             fontWeight: 700,
             color,
-            lineHeight: 1.1,
+            lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
             letterSpacing: '-0.02em',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
           }}
         >
           {value ?? '—'}
-        </div>
-        <div
+        </span>
+        <span
           style={{
-            fontSize: '0.7rem',
-            color: 'var(--space-text-muted)',
-            fontWeight: 500,
-            letterSpacing: '0.04em',
-            marginTop: '0.2rem',
-            whiteSpace: 'nowrap',
+            fontSize: '0.625rem',
+            color: '#5a5a80',
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
           }}
         >
           {label}
-        </div>
+        </span>
       </div>
     </div>
   )
 }
 
-StatCard.propTypes = {
-  icon:        PropTypes.node.isRequired,
-  value:       PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-  label:       PropTypes.string.isRequired,
-  color:       PropTypes.string,
-  accentColor: PropTypes.string,
+StatColumn.propTypes = {
+  icon:   PropTypes.node.isRequired,
+  value:  PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  label:  PropTypes.string.isRequired,
+  color:  PropTypes.string.isRequired,
+  isLast: PropTypes.bool,
 }
+
+StatColumn.defaultProps = { isLast: false }
 
 // ── StatsCards Component ──────────────────────────────────────────────────────
 
-/**
- * Row of 4 summary statistics cards.
- *
- * @param {{ stats: { total: number, debris: number, alerts: number, last_scan: string | Date | null } }} props
- * @returns {JSX.Element}
- */
 function StatsCards({ stats }) {
-  // Auto-updating "last scan" relative time
   const [lastScanLabel, setLastScanLabel] = useState('—')
 
   useEffect(() => {
     const update = () => setLastScanLabel(relativeTimeAgo(stats?.last_scan ?? null))
     update()
-    const interval = setInterval(update, 10_000) // refresh every 10 s
+    const interval = setInterval(update, 10_000)
     return () => clearInterval(interval)
   }, [stats?.last_scan])
 
@@ -145,60 +146,56 @@ function StatsCards({ stats }) {
       id="stats-cards"
       style={{
         display: 'flex',
-        gap: '0.75rem',
-        flexWrap: 'wrap',
-        padding: '0.75rem 1rem',
-        background: 'var(--space-bg)',
+        height: 48,
+        background: 'rgba(5, 5, 12, 0.95)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderTop: '1px solid #1a1a2e',
+        flexShrink: 0,
       }}
     >
-      <StatCard
-        icon={<Globe size={18} />}
+      <StatColumn
+        icon={<TrackedIcon color="#00ff9d" />}
         value={total.toLocaleString()}
-        label="Total Objects"
-        color="var(--space-text)"
-        accentColor="var(--space-cyan)"
+        label="Tracked"
+        color="#00ff9d"
       />
-      <StatCard
-        icon={<Trash2 size={18} />}
+      <StatColumn
+        icon={<DebrisIcon color="#ff4d4d" />}
         value={debris.toLocaleString()}
-        label="Debris Count"
-        color="#ff4466"
-        accentColor="#ff4466"
+        label="Debris"
+        color="#ff4d4d"
       />
-      <StatCard
-        icon={<AlertTriangle size={18} />}
+      <StatColumn
+        icon={<AlertIcon color={hasAlerts ? '#ff9d00' : '#5a5a80'} />}
         value={alerts.toLocaleString()}
-        label="Active Alerts"
-        color={hasAlerts ? '#ff9d00' : 'var(--space-text-muted)'}
-        accentColor={hasAlerts ? '#ff9d00' : 'var(--space-border-bright)'}
+        label="Alerts"
+        color={hasAlerts ? '#ff9d00' : '#5a5a80'}
       />
-      <StatCard
-        icon={<Clock size={18} />}
+      <StatColumn
+        icon={<ClockIcon color="#00d4ff" />}
         value={lastScanLabel}
         label="Last Scan"
-        color="var(--space-text-muted)"
-        accentColor="var(--space-green)"
+        color="#00d4ff"
+        isLast
       />
     </div>
   )
 }
 
 StatsCards.propTypes = {
-  /** Dashboard-level statistics object */
   stats: PropTypes.shape({
-    total:             PropTypes.number,
-    total_satellites:  PropTypes.number,
-    debris:            PropTypes.number,
-    debris_count:      PropTypes.number,
-    total_debris:      PropTypes.number,
-    alerts:            PropTypes.number,
+    total:               PropTypes.number,
+    total_satellites:    PropTypes.number,
+    debris:              PropTypes.number,
+    debris_count:        PropTypes.number,
+    total_debris:        PropTypes.number,
+    alerts:              PropTypes.number,
     active_conjunctions: PropTypes.number,
-    last_scan:         PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
+    last_scan:           PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
   }),
 }
 
-StatsCards.defaultProps = {
-  stats: null,
-}
+StatsCards.defaultProps = { stats: null }
 
 export default StatsCards

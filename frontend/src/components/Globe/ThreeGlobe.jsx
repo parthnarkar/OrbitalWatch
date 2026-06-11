@@ -1,7 +1,7 @@
 /**
  * @fileoverview ThreeGlobe.jsx — Full 3D Earth globe with real-time satellite
  * visualisation built on React Three Fiber + Drei. Upgraded with NASA Blue Marble
- * texture, rotating clouds, Fresnel atmosphere glow, pulsing selection indicators,
+ * texture, Fresnel atmosphere glow, pulsing selection indicators,
  * custom procedural fallbacks, and smart camera follow/lock behavior.
  *
  * Architecture:
@@ -13,7 +13,7 @@
  */
 
 import { Suspense, useRef, useMemo, useCallback, useState, useEffect } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Stars, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import PropTypes from 'prop-types'
@@ -24,7 +24,7 @@ import SatelliteTooltip from './SatelliteTooltip.jsx'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** Radius of the Earth sphere in Three.js units. */
-const R = 5
+const R = 6.5
 
 /** Maximum number of satellites rendered via InstancedMesh. */
 const MAX_INSTANCES = 500
@@ -64,40 +64,6 @@ function geoToCartesian(lat, lon, altitudeKm) {
 
 // ── Procedural Fallbacks ──────────────────────────────────────────────────────
 
-/** Generates a procedural cloud texture if loading from file fails. */
-function createProceduralClouds() {
-  const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 256
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return null
-
-  // Fill with transparent background
-  ctx.fillStyle = 'rgba(0,0,0,0)'
-  ctx.fillRect(0, 0, 512, 256)
-
-  // Draw soft, organic cloud-like blobs
-  for (let i = 0; i < 20; i++) {
-    const x = Math.random() * 512
-    const y = Math.random() * 256
-    const r = 30 + Math.random() * 50
-    
-    const grad = ctx.createRadialGradient(x, y, 0, x, y, r)
-    grad.addColorStop(0, 'rgba(255,255,255,0.35)')
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.12)')
-    grad.addColorStop(1, 'rgba(255,255,255,0)')
-    
-    ctx.fillStyle = grad
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.wrapS = THREE.RepeatWrapping
-  texture.wrapT = THREE.ClampToEdgeWrapping
-  return texture
-}
 
 /** Generates a clean, stylized procedural Earth texture if loading fails. */
 function createProceduralEarth() {
@@ -174,13 +140,11 @@ const AtmosphereShader = {
 
 // ── Earth mesh ────────────────────────────────────────────────────────────────
 
-/** Renders a high-quality NASA-style Earth sphere, clouds layer, and glow halo. */
+/** Renders a high-quality NASA-style Earth sphere and glow halo. */
 function EarthMesh() {
   const earthRef = useRef(/** @type {THREE.Mesh|null} */ (null))
-  const cloudsRef = useRef(/** @type {THREE.Mesh|null} */ (null))
 
   const [earthTexture, setEarthTexture] = useState(/** @type {THREE.Texture|null} */ (null))
-  const [cloudsTexture, setCloudsTexture] = useState(/** @type {THREE.Texture|null} */ (null))
 
   useEffect(() => {
     const loader = new THREE.TextureLoader()
@@ -205,32 +169,12 @@ function EarthMesh() {
         }
       }
     )
-
-    loader.load(
-      '/earth-clouds.png',
-      (tex) => {
-        tex.minFilter = THREE.LinearMipmapLinearFilter
-        tex.magFilter = THREE.LinearFilter
-        tex.generateMipmaps = true
-        tex.needsUpdate = true
-        setCloudsTexture(tex)
-      },
-      undefined,
-      (err) => {
-        console.warn('Failed to load clouds texture, generating fallback:', err)
-        const fallbackClouds = createProceduralClouds()
-        setCloudsTexture(fallbackClouds)
-      }
-    )
   }, [])
 
-  // Rotate Earth and clouds independently and slowly
+  // Rotate Earth slowly
   useFrame((_, delta) => {
     if (earthRef.current) {
       earthRef.current.rotation.y += delta * 0.015
-    }
-    if (cloudsRef.current) {
-      cloudsRef.current.rotation.y += delta * 0.022
     }
   })
 
@@ -243,26 +187,10 @@ function EarthMesh() {
           key={earthTexture ? 'textured' : 'solid'}
           map={earthTexture}
           color={earthTexture ? '#ffffff' : '#0f1c3f'}
-          roughness={0.9}
-          metalness={0.0}
+          roughness={0.6}
+          metalness={0.1}
         />
       </mesh>
-
-      {/* ── Independent Cloud layer ──────────────────────────────────────── */}
-      {cloudsTexture && (
-        <mesh ref={cloudsRef}>
-          <sphereGeometry args={[R * 1.01, 64, 64]} />
-          <meshStandardMaterial
-            key={cloudsTexture.uuid}
-            alphaMap={cloudsTexture}
-            color="#ffffff"
-            transparent
-            opacity={0.3}
-            depthWrite={false}
-            blending={THREE.NormalBlending}
-          />
-        </mesh>
-      )}
 
       {/* ── Subtle mission-control wireframe grid overlay ───────────────── */}
       <mesh>
@@ -304,6 +232,8 @@ function EarthMesh() {
  */
 function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHover }) {
   const meshRef = useRef(/** @type {THREE.InstancedMesh|null} */ (null))
+  const [hoveredInstanceId, setHoveredInstanceId] = useState(null)
+  const { raycaster, camera, pointer } = useThree()
 
   // Build a fast lookup: norad_id → position data
   const posMap = useMemo(() => {
@@ -341,9 +271,8 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
 
   // Reusable scratch objects (avoid allocations inside useFrame)
   const dummy = useMemo(() => new THREE.Object3D(), [])
-  const colorObj = useMemo(() => new THREE.Color(), [])
 
-  // Update instance matrices & colours whenever visible list changes
+  // Update instance matrices & colours whenever visible list or satellites prop changes
   useEffect(() => {
     const mesh = meshRef.current
     if (!mesh) return
@@ -362,17 +291,38 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
 
-      // Colour by type
+      // Create a THREE.Color object from the satellite's type
       const typeKey = (sat.object_type || sat.type || 'unknown').toLowerCase()
-      const hex = TYPE_COLORS[typeKey] ?? DEFAULT_COLOR
-      colorObj.set(hex)
-      mesh.setColorAt(i, colorObj)
+      let color
+      if (typeKey === 'payload') {
+        color = new THREE.Color('#00ff9d')
+      } else if (typeKey === 'debris') {
+        color = new THREE.Color('#ff4d4d')
+      } else if (typeKey === 'rocket body') {
+        color = new THREE.Color('#ff9d00')
+      } else {
+        color = new THREE.Color('#888888')
+      }
+      mesh.setColorAt(i, color)
     })
 
     mesh.count = visible.length
     mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [visible, selectedNoradId, dummy, colorObj])
+    if (mesh.instanceColor) {
+      mesh.instanceColor.needsUpdate = true
+    }
+
+    // Add a console.log to verify colors are being set (first 5 satellite types and colors)
+    const logData = visible.slice(0, 5).map((sat) => {
+      const typeKey = (sat.object_type || sat.type || 'unknown').toLowerCase()
+      let colorStr = '#888888'
+      if (typeKey === 'payload') colorStr = '#00ff9d'
+      else if (typeKey === 'debris') colorStr = '#ff4d4d'
+      else if (typeKey === 'rocket body') colorStr = '#ff9d00'
+      return { type: typeKey, color: colorStr }
+    })
+    console.log('Satellite colors (first 5):', logData)
+  }, [visible, selectedNoradId, dummy, satellites])
 
   // Pulse the selected satellite instance's scale in the frame loop
   useFrame(({ clock }) => {
@@ -397,44 +347,66 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
     meshRef.current.instanceMatrix.needsUpdate = true
   })
 
+  // Custom raycasting inside useFrame for hover detection
+  useFrame(() => {
+    if (!meshRef.current) return
+    raycaster.setFromCamera(pointer, camera)
+    const intersects = raycaster.intersectObject(meshRef.current)
+    let newHoveredId = null
+    if (intersects.length > 0) {
+      const instId = intersects[0].instanceId
+      if (instId !== undefined && instId < visible.length) {
+        newHoveredId = instId
+      }
+    }
+
+    setHoveredInstanceId((prev) => {
+      if (prev !== newHoveredId) {
+        return newHoveredId
+      }
+      return prev
+    })
+  })
+
+  // Sync hovered instance data to parent component
+  useEffect(() => {
+    if (hoveredInstanceId !== null && hoveredInstanceId < visible.length) {
+      onHover(visible[hoveredInstanceId])
+    } else {
+      onHover(null)
+    }
+  }, [hoveredInstanceId, visible, onHover])
+
   // Click → select
   const handleClick = useCallback(
     (e) => {
       e.stopPropagation()
-      const idx = e.instanceId
-      if (idx == null || idx >= visible.length) return
-      onSelect(String(visible[idx].norad_id))
-    },
-    [visible, onSelect],
-  )
-
-  // Hover → tooltip
-  const handlePointerMove = useCallback(
-    (e) => {
-      e.stopPropagation()
-      const idx = e.instanceId
-      if (idx == null || idx >= visible.length) {
-        onHover(null)
-        return
+      if (hoveredInstanceId !== null && hoveredInstanceId < visible.length) {
+        onSelect(String(visible[hoveredInstanceId].norad_id))
       }
-      onHover(visible[idx])
     },
-    [visible, onHover],
+    [hoveredInstanceId, visible, onSelect],
   )
 
-  const handlePointerOut = useCallback(() => onHover(null), [onHover])
+  const handlePointerOut = useCallback(() => {
+    setHoveredInstanceId(null)
+  }, [])
 
   return (
     <instancedMesh
       ref={meshRef}
       args={[null, null, MAX_INSTANCES]}
       onClick={handleClick}
-      onPointerMove={handlePointerMove}
       onPointerOut={handlePointerOut}
       frustumCulled={false}
+      castShadow={false}
     >
       <sphereGeometry args={[0.08, 8, 8]} />
-      <meshBasicMaterial vertexColors />
+      <meshStandardMaterial
+        roughness={0.5}
+        metalness={0.1}
+        color={new THREE.Color('white')}
+      />
     </instancedMesh>
   )
 }
@@ -655,18 +627,18 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
   return (
     <>
       {/* ── Lighting ──────────────────────────────────────────────────────── */}
-      <ambientLight intensity={0.35} />
+      <ambientLight intensity={0.8} />
       {/* Direct Sun light */}
-      <directionalLight position={[10, 5, 10]} intensity={1.8} castShadow />
+      <directionalLight position={[10, 5, 10]} intensity={2.5} castShadow />
       {/* Subtle back rim light for atmospheric outline pop */}
-      <directionalLight position={[-12, -6, -12]} intensity={1.0} color="#0055aa" />
+      <directionalLight position={[-12, -6, -12]} intensity={1.5} color="#0088ff" />
       {/* Dark side fill point light */}
-      <pointLight position={[-10, -5, -10]} intensity={0.3} color="#001a35" />
+      <pointLight position={[-10, -5, -10]} intensity={0.8} color="#2266aa" />
 
       {/* ── Cinematic Stars field background ──────────────────────────────── */}
       <Stars radius={300} depth={150} count={15000} factor={6} saturation={0.8} fade speed={1.5} />
 
-      {/* ── Earth sphere, clouds layer, atmosphere glow halo ──────────────── */}
+      {/* ── Earth sphere, atmosphere glow halo ──────────────── */}
       <EarthMesh />
 
       {/* ── Satellite dots ────────────────────────────────────────────────── */}
@@ -691,10 +663,11 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
       <OrbitControls
         ref={controlsRef}
         enablePan={false}
-        minDistance={8}
-        maxDistance={30}
+        minDistance={9}
+        maxDistance={35}
         autoRotate={!followActive}
         autoRotateSpeed={autoRotateSpeed}
+        target={[0, 0, 0]}
         makeDefault
       />
     </>
@@ -728,7 +701,7 @@ function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controls
 
   return (
     <Canvas
-      camera={{ position: [0, 0, 18], fov: 45 }}
+      camera={{ position: [0, 0, 20], fov: 50 }}
       style={{ background: '#000010', width: '100%', height: '100%' }}
       dpr={[1, 2]}
       shadows
