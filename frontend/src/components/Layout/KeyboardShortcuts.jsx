@@ -48,7 +48,7 @@ function useFocusTrap(container) {
 // ── SHORTCUTS MAP ─────────────────────────────────────────────────────────────
 
 /** @type {{ key: string, description: string }[]} */
-const SHORTCUTS = [
+export const SHORTCUTS = [
   { key: '/',      description: 'Focus search bar' },
   { key: 'g',      description: 'Switch to Globe view' },
   { key: 'a',      description: 'Switch to Alerts view' },
@@ -161,8 +161,6 @@ function ShortcutsModal({ onClose }) {
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
           zIndex: 300,
           animation: 'fadeIn 0.2s ease forwards',
         }}
@@ -181,6 +179,8 @@ function ShortcutsModal({ onClose }) {
           transform: 'translate(-50%, -50%)',
           width: 420,
           maxWidth: '90vw',
+          maxHeight: '85vh',
+          overflowY: 'auto',
           background: '#0a0a12',
           border: '1px solid rgba(0,212,255,0.3)',
           borderRadius: 16,

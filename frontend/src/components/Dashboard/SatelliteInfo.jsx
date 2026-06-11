@@ -32,14 +32,18 @@ function SkeletonBar({ width = '100%', height = 18 }) {
 SkeletonBar.propTypes = { width: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), height: PropTypes.number }
 
 /** Stat grid cell */
-function StatCell({ label, value, color = 'var(--space-text)' }) {
+function StatCell({ label, value, color = 'var(--space-text)', style }) {
   return (
     <div
       style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
         background: 'rgba(255,255,255,0.03)',
         border: '1px solid var(--space-border)',
         borderRadius: 8,
         padding: '0.75rem 1rem',
+        ...style,
       }}
     >
       <div style={{ fontSize: '0.65rem', color: 'var(--space-text-dim)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
@@ -51,7 +55,7 @@ function StatCell({ label, value, color = 'var(--space-text)' }) {
     </div>
   )
 }
-StatCell.propTypes = { label: PropTypes.string, value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), color: PropTypes.string }
+StatCell.propTypes = { label: PropTypes.string, value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), color: PropTypes.string, style: PropTypes.object }
 
 // ── TLE Collapsible ────────────────────────────────────────────────────────────
 
@@ -77,7 +81,7 @@ function TLESection({ tle1, tle2 }) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.5rem',
+          gap: '0.4rem',
           fontSize: '0.75rem',
           fontWeight: 600,
           color: 'var(--space-text-muted)',
@@ -145,10 +149,12 @@ TLESection.propTypes = { tle1: PropTypes.string, tle2: PropTypes.string }
  * @param {{ noradId: string | null }} props
  * @returns {JSX.Element}
  */
-function SatelliteInfo({ noradId }) {
+function SatelliteInfo({ noradId, isOpen, onToggle }) {
   const [satellite, setSatellite] = useState(/** @type {Object|null} */ (null))
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState(/** @type {string|null} */ (null))
+
+  const collapsed = !isOpen
 
   useEffect(() => {
     if (!noradId) {
@@ -177,17 +183,24 @@ function SatelliteInfo({ noradId }) {
   }, [noradId])
 
   const cardStyle = {
-    background: '#0f0f1a',
-    border: '1px solid var(--space-border)',
-    borderRadius: 'var(--radius-lg)',
-    padding: '1.25rem',
-    minHeight: '200px',
+    display: 'flex',
+    flexDirection: 'column',
+    background: 'rgba(10,10,18,0.88)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid #1a1a2e',
+    borderRadius: '14px',
+    overflow: 'hidden',
+    minHeight: collapsed ? 'auto' : '200px',
+    transition: 'all var(--transition-base)',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    pointerEvents: 'auto',
   }
 
   // ── Empty state ─────────────────────────────────────────────────────────────
   if (!noradId) {
     return (
-      <div id="satellite-info-panel" style={{ ...cardStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', minHeight: 200 }}>
+      <div id="satellite-info-panel" style={{ ...cardStyle, padding: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', minHeight: 200 }}>
         <div style={{ fontSize: '2rem', opacity: 0.3 }}>🛰️</div>
         <p style={{ fontSize: '0.85rem', color: 'var(--space-text-muted)', textAlign: 'center', lineHeight: 1.6 }}>
           Select a satellite on the globe to view details
@@ -199,14 +212,14 @@ function SatelliteInfo({ noradId }) {
   // ── Loading state ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div id="satellite-info-panel" style={cardStyle}>
+      <div id="satellite-info-panel" style={{ ...cardStyle, padding: '1.25rem' }}>
         <SkeletonBar height={24} width="60%" />
         <SkeletonBar height={14} width="30%" />
-        <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <SkeletonBar height={60} />
-          <SkeletonBar height={60} />
-          <SkeletonBar height={60} />
-          <SkeletonBar height={60} />
+        <div style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ flex: '1 1 calc(50% - 4px)' }}><SkeletonBar height={60} /></div>
+          <div style={{ flex: '1 1 calc(50% - 4px)' }}><SkeletonBar height={60} /></div>
+          <div style={{ flex: '1 1 calc(50% - 4px)' }}><SkeletonBar height={60} /></div>
+          <div style={{ flex: '1 1 calc(50% - 4px)' }}><SkeletonBar height={60} /></div>
         </div>
       </div>
     )
@@ -215,7 +228,7 @@ function SatelliteInfo({ noradId }) {
   // ── Error state ─────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div id="satellite-info-panel" style={{ ...cardStyle, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minHeight: 200 }}>
+      <div id="satellite-info-panel" style={{ ...cardStyle, padding: '1.25rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', minHeight: 200 }}>
         <div style={{ fontSize: '1.5rem' }}>⚠️</div>
         <p style={{ fontSize: '0.8rem', color: 'var(--space-red)', textAlign: 'center' }}>{error}</p>
       </div>
@@ -231,79 +244,117 @@ function SatelliteInfo({ noradId }) {
 
   return (
     <div id="satellite-info-panel" style={cardStyle}>
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: '1rem' }}>
-        <div
-          style={{
-            fontSize: '1.1rem',
-            fontWeight: 700,
-            color: 'var(--space-text)',
-            marginBottom: '0.3rem',
-            wordBreak: 'break-word',
-          }}
-        >
-          {satellite.name ?? `NORAD ${noradId}`}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-          <span
+      {/* ── Collapsible Header Button ── */}
+      <button
+        onClick={onToggle}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.75rem 1rem',
+          background: 'rgba(255,255,255,0.03)',
+          border: 'none',
+          borderBottom: collapsed ? 'none' : '1px solid #1a1a2e',
+          color: '#e8e8f0',
+          cursor: 'pointer',
+          transition: 'background 150ms ease',
+          textAlign: 'left',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+        title={collapsed ? "Expand Details" : "Collapse Details"}
+      >
+        <div style={{ flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+          <div
             style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '0.8rem',
-              color: 'var(--space-cyan)',
-              fontWeight: 600,
+              fontSize: '0.95rem',
+              fontWeight: 700,
+              color: 'var(--space-text)',
+              marginBottom: '0.2rem',
+              wordBreak: 'break-word',
             }}
           >
-            #{satellite.norad_id ?? noradId}
-          </span>
-          {(satellite.object_type || satellite.type) && (
+            {satellite.name ?? `NORAD ${noradId}`}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span
               style={{
-                fontSize: '0.65rem',
-                fontWeight: 700,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                padding: '0.15rem 0.5rem',
-                borderRadius: 999,
-                background: tc.bg,
-                color: tc.color,
-                border: `1px solid ${tc.border}`,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: '0.72rem',
+                color: 'var(--space-cyan)',
+                fontWeight: 600,
               }}
             >
-              {satellite.object_type ?? satellite.type}
+              #{satellite.norad_id ?? noradId}
             </span>
-          )}
+            {(satellite.object_type || satellite.type) && (
+              <span
+                style={{
+                  fontSize: '0.6rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  padding: '0.1rem 0.35rem',
+                  borderRadius: 999,
+                  background: tc.bg,
+                  color: tc.color,
+                  border: `1px solid ${tc.border}`,
+                }}
+              >
+                {satellite.object_type ?? satellite.type}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* ── Stats grid ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem' }}>
-        <StatCell
-          label="Altitude"
-          value={altitude != null ? `${Number(altitude).toFixed(0)} km` : null}
-          color="var(--space-cyan)"
-        />
-        <StatCell
-          label="Velocity"
-          value={velocity != null ? `${Number(velocity).toFixed(2)} km/s` : null}
-          color="var(--space-amber)"
-        />
-        <StatCell
-          label="Orbital Period"
-          value={period != null ? `${Number(period).toFixed(1)} min` : null}
-          color="var(--space-green)"
-        />
-        <StatCell
-          label="Object Type"
-          value={satellite.object_type ?? satellite.type ?? 'Unknown'}
-          color={tc.color}
-        />
-      </div>
+        <span
+          style={{
+            opacity: 0.6,
+            transform: collapsed ? 'rotate(0deg)' : 'rotate(180deg)',
+            transition: 'transform 200ms ease',
+            fontSize: '0.75rem',
+            lineHeight: 1,
+            flexShrink: 0,
+          }}
+        >
+          ▼
+        </span>
+      </button>
 
-      {/* ── TLE section ───────────────────────────────────────────────────── */}
-      <TLESection
-        tle1={satellite.tle_line1 ?? satellite.line1}
-        tle2={satellite.tle_line2 ?? satellite.line2}
-      />
+      {!collapsed && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', maxHeight: '240px', overflowY: 'auto' }}>
+          {/* ── Stats grid ────────────────────────────────────────────────────── */}
+          <div className="sat-stats-grid">
+            <StatCell
+              label="Altitude"
+              value={altitude != null ? `${Number(altitude).toFixed(0)} km` : null}
+              color="var(--space-cyan)"
+            />
+            <StatCell
+              label="Velocity"
+              value={velocity != null ? `${Number(velocity).toFixed(2)} km/s` : null}
+              color="var(--space-amber)"
+            />
+            <StatCell
+              label="Orbital Period"
+              value={period != null ? `${Number(period).toFixed(1)} min` : null}
+              color="var(--space-green)"
+            />
+            <StatCell
+              label="Object Type"
+              value={satellite.object_type ?? satellite.type ?? 'Unknown'}
+              color={tc.color}
+            />
+          </div>
+
+          {/* ── TLE section ───────────────────────────────────────────────────── */}
+          <TLESection
+            tle1={satellite.tle_line1 ?? satellite.line1}
+            tle2={satellite.tle_line2 ?? satellite.line2}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -311,10 +362,16 @@ function SatelliteInfo({ noradId }) {
 SatelliteInfo.propTypes = {
   /** NORAD catalog ID of the satellite to display. Null shows empty state. */
   noradId: PropTypes.string,
+  /** Whether the info body section is expanded or collapsed */
+  isOpen:   PropTypes.bool,
+  /** Callback triggered when clicking the header to toggle expand/collapse state */
+  onToggle: PropTypes.func,
 }
 
 SatelliteInfo.defaultProps = {
-  noradId: null,
+  noradId:  null,
+  isOpen:   true,
+  onToggle: null,
 }
 
 export default SatelliteInfo

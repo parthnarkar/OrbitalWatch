@@ -70,33 +70,16 @@ function Sidebar({ activeNav, onNavChange, alertCount, connected }) {
       {/* ── Logo ──────────────────────────────────────────────────────────────── */}
       <div style={{ padding: '1.5rem 1.25rem 1rem', borderBottom: '1px solid var(--space-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-          <div
+          <img
+            src="/logo.png"
+            alt="OrbitalWatch Logo"
             style={{
               width: 36,
               height: 36,
-              borderRadius: '50%',
-              border: '2px solid var(--space-cyan)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              boxShadow: 'var(--glow-cyan)',
+              objectFit: 'contain',
               flexShrink: 0,
             }}
-          >
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--space-cyan)' }} />
-            <div
-              style={{
-                position: 'absolute',
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: 'var(--space-green)',
-                animation: 'orbit 3s linear infinite',
-                boxShadow: 'var(--glow-green)',
-              }}
-            />
-          </div>
+          />
           <div>
             <h1
               style={{ fontSize: '1.125rem', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}

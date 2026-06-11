@@ -32,9 +32,7 @@ function countdown(dt) {
   const s = Math.floor((diff % 60_000) / 1_000)
   if (h > 24) return new Date(dt).toLocaleString()
   return `T-${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-}
-
-// ── Satellite Mini Card ────────────────────────────────────────────────────────
+}// ── Satellite Mini Card ────────────────────────────────────────────────────────
 
 /** @param {{ name: string, noradId: string, type: string }} props */
 function SatMiniCard({ name, noradId, type }) {
@@ -52,7 +50,7 @@ function SatMiniCard({ name, noradId, type }) {
         border: '1px solid var(--space-border)',
         borderRadius: 8,
         padding: '0.75rem',
-        minWidth: 0,
+        minWidth: 130,
       }}
     >
       <div
@@ -196,15 +194,6 @@ function AlertDetail({ conjunction, onClose }) {
         id="alert-detail-backdrop"
         aria-hidden="true"
         onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.5)',
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-          zIndex: 100,
-          animation: 'fadeIn 0.2s ease forwards',
-        }}
       />
 
       {/* ── Panel ─────────────────────────────────────────────────────────────── */}
@@ -214,19 +203,7 @@ function AlertDetail({ conjunction, onClose }) {
         aria-modal="true"
         aria-label="Conjunction alert detail"
         style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 400,
-          maxWidth: '100vw',
-          background: '#0a0a12',
-          borderLeft: `3px solid ${riskCfg.border}`,
-          zIndex: 101,
-          display: 'flex',
-          flexDirection: 'column',
-          animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-          overflowY: 'auto',
+          '--risk-border-color': riskCfg.border,
         }}
       >
         {/* Header */}
@@ -306,7 +283,7 @@ function AlertDetail({ conjunction, onClose }) {
             <div style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--space-text-dim)', marginBottom: '0.6rem' }}>
               Involved Objects
             </div>
-            <div style={{ display: 'flex', gap: '0.625rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.625rem' }}>
               <SatMiniCard
                 name={conjunction.sat1_name ?? conjunction.satellite1_name ?? conjunction.primary}
                 noradId={String(conjunction.sat1_norad_id ?? conjunction.satellite1_norad ?? conjunction.norad1 ?? '')}
@@ -376,14 +353,6 @@ function AlertDetail({ conjunction, onClose }) {
           </button>
         </div>
       </div>
-
-      {/* Slide-in animation */}
-      <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
-        }
-      `}</style>
     </>
   )
 }

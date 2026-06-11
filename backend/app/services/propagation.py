@@ -32,18 +32,32 @@ def ensure_utc(timestamp: datetime | None = None) -> datetime:
     return timestamp.astimezone(timezone.utc)
 
 
+# In-memory cache to store instantiated EarthSatellite objects to prevent parsing TLE strings repeatedly.
+# Maps: norad_id -> (tle_line1, tle_line2, EarthSatellite)
+_satellite_cache: dict[str, tuple[str, str, EarthSatellite]] = {}
+
+
 def propagate_satellite(
     satellite: SatelliteModel,
     timestamp: datetime | None = None,
 ) -> PropagationResult | None:
     moment = ensure_utc(timestamp)
     try:
-        earth_satellite = EarthSatellite(
-            satellite.tle_line1,
-            satellite.tle_line2,
-            satellite.name,
-            ts,
-        )
+        cached = _satellite_cache.get(satellite.norad_id)
+        if cached and cached[0] == satellite.tle_line1 and cached[1] == satellite.tle_line2:
+            earth_satellite = cached[2]
+        else:
+            earth_satellite = EarthSatellite(
+                satellite.tle_line1,
+                satellite.tle_line2,
+                satellite.name,
+                ts,
+            )
+            _satellite_cache[satellite.norad_id] = (
+                satellite.tle_line1,
+                satellite.tle_line2,
+                earth_satellite,
+            )
         t = ts.from_datetime(moment)
         geocentric = earth_satellite.at(t)
         subpoint = geocentric.subpoint()

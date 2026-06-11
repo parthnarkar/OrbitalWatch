@@ -34,12 +34,35 @@ async def run_conjunction_scan() -> None:
             await session.commit()
             last_scan_at = datetime.now(timezone.utc)
 
+            # Bulk query satellite metadata for high-risk alerts to avoid loop queries
+            high_risk_conjs = [c for c in conjunctions if c.risk_level == "HIGH"]
+            sat_map = {}
+            if high_risk_conjs:
+                norad_ids = set()
+                for c in high_risk_conjs:
+                    norad_ids.add(c.sat1_norad_id)
+                    norad_ids.add(c.sat2_norad_id)
+                from app.models.satellite import SatelliteModel
+                from sqlalchemy import select
+                sat_stmt = select(SatelliteModel.norad_id, SatelliteModel.name, SatelliteModel.object_type).where(
+                    SatelliteModel.norad_id.in_(list(norad_ids))
+                )
+                sat_result = await session.execute(sat_stmt)
+                sat_map = {row[0]: (row[1], row[2]) for row in sat_result.all()}
+
             for conjunction in conjunctions:
                 if conjunction.risk_level == "HIGH":
-                    sat1_name = await get_satellite_name(session, conjunction.sat1_norad_id)
-                    sat1_type = await get_satellite_type(session, conjunction.sat1_norad_id)
-                    sat2_name = await get_satellite_name(session, conjunction.sat2_norad_id)
-                    sat2_type = await get_satellite_type(session, conjunction.sat2_norad_id)
+                    if conjunction.sat1_norad_id in sat_map:
+                        sat1_name, sat1_type = sat_map[conjunction.sat1_norad_id]
+                    else:
+                        sat1_name = await get_satellite_name(session, conjunction.sat1_norad_id)
+                        sat1_type = await get_satellite_type(session, conjunction.sat1_norad_id)
+
+                    if conjunction.sat2_norad_id in sat_map:
+                        sat2_name, sat2_type = sat_map[conjunction.sat2_norad_id]
+                    else:
+                        sat2_name = await get_satellite_name(session, conjunction.sat2_norad_id)
+                        sat2_type = await get_satellite_type(session, conjunction.sat2_norad_id)
 
                     alert_payload = {
                         "id": conjunction.id,

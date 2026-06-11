@@ -4,7 +4,7 @@
  * top-right camera controls, bottom stats bar.
  */
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import PropTypes from 'prop-types'
 import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
@@ -19,6 +19,7 @@ import AlertDetail      from './components/Dashboard/AlertDetail.jsx'
 import AltitudeChart    from './components/Dashboard/AltitudeChart.jsx'
 import TypeDistribution from './components/Dashboard/TypeDistribution.jsx'
 import DemoMode, { useDemoMode } from './components/Dashboard/DemoMode.jsx'
+import { useKeyboardShortcuts, SHORTCUTS } from './components/Layout/KeyboardShortcuts.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
 import { fetchStats, fetchConjunctions } from './services/api.js'
@@ -35,16 +36,7 @@ const TYPE_COLORS = {
 
 // ── SVG Icons ─────────────────────────────────────────────────────────────────
 
-const TargetIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="12" r="3" />
-    <line x1="12" y1="2" x2="12" y2="7" />
-    <line x1="12" y1="17" x2="12" y2="22" />
-    <line x1="2" y1="12" x2="7" y2="12" />
-    <line x1="17" y1="12" x2="22" y2="12" />
-  </svg>
-)
+
 
 const ResetIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -62,11 +54,20 @@ const ChevronDown = () => (
 // ── Floating Left Panel (Filters + Legend) ────────────────────────────────────
 
 /**
- * @param {{ stats: Object, filters: Object, onChange: Function, satellites: Array }} props
+ * @param {{ stats: Object, filters: Object, onChange: Function, satellites: Array, shortcutsOpen: boolean, setShortcutsOpen: Function, filtersOpen: boolean, setFiltersOpen: Function, legendOpen: boolean, setLegendOpen: Function }} props
  */
-function FloatingFilterPanel({ stats, filters, onChange, satellites }) {
-  const [filtersOpen, setFiltersOpen] = useState(true)
-  const [legendOpen, setLegendOpen] = useState(false)
+function FloatingFilterPanel({
+  stats,
+  filters,
+  onChange,
+  satellites,
+  shortcutsOpen,
+  setShortcutsOpen,
+  filtersOpen,
+  setFiltersOpen,
+  legendOpen,
+  setLegendOpen,
+}) {
 
   const ALL_TYPES = ['payload', 'debris', 'rocket body', 'unknown']
 
@@ -100,153 +101,242 @@ function FloatingFilterPanel({ stats, filters, onChange, satellites }) {
     return counts[type]
   }
 
+  const panelStyle = {
+    background: 'rgba(10,10,18,0.88)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    borderRadius: '14px',
+    border: '1px solid #1a1a2e',
+    overflow: 'hidden',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+    pointerEvents: 'auto',
+    width: '100%',
+  }
+
   return (
     <div
       id="floating-filter-panel"
       style={{
-        position: 'absolute',
-        left: 24,
-        top: 80,
-        width: 180,
-        background: 'rgba(10,10,18,0.88)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderRadius: '14px',
-        border: '1px solid #1a1a2e',
-        overflow: 'hidden',
-        zIndex: 40,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
       }}
     >
-      {/* Filters header button */}
-      <button
-        onClick={() => setFiltersOpen((v) => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.625rem 0.875rem',
-          background: 'rgba(255,255,255,0.03)',
-          border: 'none',
-          borderBottom: filtersOpen ? '1px solid #1a1a2e' : 'none',
-          color: '#e8e8f0',
-          fontSize: '0.8rem',
-          fontWeight: 600,
-          letterSpacing: '0.04em',
-          cursor: 'pointer',
-          transition: 'background 150ms ease',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '0.85rem' }}>⚙</span>
-          Filters
-        </span>
-        <span style={{ opacity: 0.6, transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
-          <ChevronDown />
-        </span>
-      </button>
+      {/* ── Shortcuts Section ── */}
+      <div style={panelStyle}>
+        <button
+          onClick={() => setShortcutsOpen(!shortcutsOpen)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.625rem 0.875rem',
+            background: 'rgba(255,255,255,0.03)',
+            border: 'none',
+            borderBottom: shortcutsOpen ? '1px solid #1a1a2e' : 'none',
+            color: '#e8e8f0',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+            transition: 'background 150ms ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.85rem' }}>⌨️</span>
+            Shortcuts
+          </span>
+          <span style={{ opacity: 0.6, transform: shortcutsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+            <ChevronDown />
+          </span>
+        </button>
 
-      {/* Type list */}
-      {filtersOpen && (
-        <div style={{ padding: '0.5rem 0' }}>
-          {ALL_TYPES.map((type) => {
-            const isActive = activeTypes.includes(type)
-            const color = TYPE_COLORS[type]
-            const count = getCount(type)
-            const label = type === 'rocket body' ? 'Rocket Body' : type.charAt(0).toUpperCase() + type.slice(1)
-            return (
-              <button
-                key={type}
-                onClick={() => handleTypeToggle(type)}
+        {shortcutsOpen && (
+          <div
+            style={{
+              padding: '0.5rem 0.875rem 0.625rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.4rem',
+              maxHeight: '180px',
+              overflowY: 'auto',
+            }}
+          >
+            {SHORTCUTS.map(({ key, description }) => (
+              <div
+                key={key}
                 style={{
-                  width: '100%',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.45rem 0.875rem',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  opacity: isActive ? 1 : 0.38,
-                  transition: 'opacity 150ms ease, background 150ms ease',
+                  justifyContent: 'space-between',
+                  padding: '0.3rem 0',
+                  borderBottom: '1px solid rgba(26,26,46,0.5)',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                title={`${isActive ? 'Hide' : 'Show'} ${label}`}
               >
-                {/* Colored dot */}
-                <div
+                <span style={{ fontSize: '0.72rem', color: '#8888aa' }}>{description}</span>
+                <kbd
                   style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: color,
-                    boxShadow: isActive ? `0 0 6px ${color}` : 'none',
-                    flexShrink: 0,
-                    transition: 'box-shadow 150ms ease',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: 26,
+                    padding: '0.1rem 0.35rem',
+                    background: 'rgba(0,212,255,0.08)',
+                    border: '1px solid rgba(0,212,255,0.25)',
+                    borderRadius: 4,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: '0.65rem',
+                    fontWeight: 700,
+                    color: '#00d4ff',
                   }}
-                />
-                <span style={{ flex: 1, textAlign: 'left', fontSize: '0.78rem', color: '#e8e8f0', fontWeight: 500 }}>
-                  {label}
-                </span>
-                <span style={{ fontSize: '0.72rem', color: '#5a5a80', fontVariantNumeric: 'tabular-nums' }}>
-                  {count > 0 ? count.toLocaleString() : '—'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* View Legend toggle */}
-      <button
-        onClick={() => setLegendOpen((v) => !v)}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.55rem 0.875rem',
-          background: 'rgba(255,255,255,0.02)',
-          border: 'none',
-          borderTop: '1px solid #1a1a2e',
-          color: '#8a8ab0',
-          fontSize: '0.75rem',
-          fontWeight: 500,
-          cursor: 'pointer',
-          transition: 'background 150ms ease',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-      >
-        <span>View Legend</span>
-        <span style={{ opacity: 0.6, transform: legendOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
-          <ChevronDown />
-        </span>
-      </button>
-
-      {/* Legend dropdown */}
-      {legendOpen && (
-        <div style={{ padding: '0.5rem 0.875rem 0.625rem', borderTop: '1px solid #1a1a2e' }}>
-          {[
-            { label: 'Payload',      color: '#00ff9d', desc: 'Active satellites' },
-            { label: 'Debris',       color: '#ff4d4d', desc: 'Space debris' },
-            { label: 'Rocket Body',  color: '#ff9d00', desc: 'Rocket stages' },
-            { label: 'Unknown',      color: '#888888', desc: 'Unclassified' },
-          ].map(({ label, color, desc }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.2rem 0' }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 5px ${color}`, flexShrink: 0 }} />
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '0.72rem', color: '#e8e8f0', fontWeight: 500, lineHeight: 1.2 }}>{label}</span>
-                <span style={{ fontSize: '0.62rem', color: '#5a5a80' }}>{desc}</span>
+                >
+                  {key === 'Escape' ? 'Esc' : key}
+                </kbd>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Filters Section ── */}
+      <div style={panelStyle}>
+        <button
+          onClick={() => setFiltersOpen(!filtersOpen)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.625rem 0.875rem',
+            background: 'rgba(255,255,255,0.03)',
+            border: 'none',
+            borderBottom: filtersOpen ? '1px solid #1a1a2e' : 'none',
+            color: '#e8e8f0',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+            transition: 'background 150ms ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.85rem' }}>⚙</span>
+            Filters
+          </span>
+          <span style={{ opacity: 0.6, transform: filtersOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+            <ChevronDown />
+          </span>
+        </button>
+
+        {filtersOpen && (
+          <div style={{ padding: '0.5rem 0', maxHeight: '180px', overflowY: 'auto' }}>
+            {ALL_TYPES.map((type) => {
+              const isActive = activeTypes.includes(type)
+              const color = TYPE_COLORS[type]
+              const count = getCount(type)
+              const label = type === 'rocket body' ? 'Rocket Body' : type.charAt(0).toUpperCase() + type.slice(1)
+              return (
+                <button
+                  key={type}
+                  onClick={() => handleTypeToggle(type)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.45rem 0.875rem',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    opacity: isActive ? 1 : 0.38,
+                    transition: 'opacity 150ms ease, background 150ms ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                  title={`${isActive ? 'Hide' : 'Show'} ${label}`}
+                >
+                  {/* Colored dot */}
+                  <div
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: color,
+                      boxShadow: isActive ? `0 0 6px ${color}` : 'none',
+                      flexShrink: 0,
+                      transition: 'box-shadow 150ms ease',
+                    }}
+                  />
+                  <span style={{ flex: 1, textAlign: 'left', fontSize: '0.78rem', color: '#e8e8f0', fontWeight: 500 }}>
+                    {label}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#5a5a80', fontVariantNumeric: 'tabular-nums' }}>
+                    {count > 0 ? count.toLocaleString() : '—'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Legend Section ── */}
+      <div style={panelStyle}>
+        <button
+          onClick={() => setLegendOpen(!legendOpen)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.625rem 0.875rem',
+            background: 'rgba(255,255,255,0.03)',
+            border: 'none',
+            borderBottom: legendOpen ? '1px solid #1a1a2e' : 'none',
+            color: '#e8e8f0',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            cursor: 'pointer',
+            transition: 'background 150ms ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.85rem' }}>📊</span>
+            Legend
+          </span>
+          <span style={{ opacity: 0.6, transform: legendOpen ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>
+            <ChevronDown />
+          </span>
+        </button>
+
+        {legendOpen && (
+          <div style={{ padding: '0.5rem 0.875rem 0.625rem', maxHeight: '180px', overflowY: 'auto' }}>
+            {[
+              { label: 'Payload',      color: '#00ff9d', desc: 'Active satellites' },
+              { label: 'Debris',       color: '#ff4d4d', desc: 'Space debris' },
+              { label: 'Rocket Body',  color: '#ff9d00', desc: 'Rocket stages' },
+              { label: 'Unknown',      color: '#888888', desc: 'Unclassified' },
+            ].map(({ label, color, desc }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 5px ${color}`, flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#e8e8f0', fontWeight: 500, lineHeight: 1.2 }}>{label}</span>
+                  <span style={{ fontSize: '0.62rem', color: '#5a5a80' }}>{desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -256,13 +346,15 @@ FloatingFilterPanel.propTypes = {
   filters:    PropTypes.object.isRequired,
   onChange:   PropTypes.func.isRequired,
   satellites: PropTypes.array.isRequired,
+  openSection: PropTypes.string.isRequired,
+  setOpenSection: PropTypes.func.isRequired,
 }
 
 FloatingFilterPanel.defaultProps = { stats: null }
 
 // ── Top-Right Camera Controls ─────────────────────────────────────────────────
 
-function CameraControls({ onCenter, onReset }) {
+function CameraControls({ onReset }) {
   return (
     <div
       style={{
@@ -275,55 +367,48 @@ function CameraControls({ onCenter, onReset }) {
         zIndex: 40,
       }}
     >
-      {[
-        { id: 'btn-center-camera', label: 'Center on satellite', icon: <TargetIcon />, onClick: onCenter, title: 'Center' },
-        { id: 'btn-reset-camera',  label: 'Reset camera view',   icon: <ResetIcon />,  onClick: onReset,  title: 'Reset'  },
-      ].map(({ id, label, icon, onClick, title }) => (
-        <button
-          key={id}
-          id={id}
-          aria-label={label}
-          title={label}
-          onClick={onClick}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: '50%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#0f0f1a',
-            border: '1px solid #1a1a2e',
-            color: '#8a8ab0',
-            cursor: 'pointer',
-            transition: 'all 150ms ease',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-            gap: '0.1rem',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#1a1a2e'
-            e.currentTarget.style.color = '#e8e8f0'
-            e.currentTarget.style.borderColor = '#2a2a4a'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#0f0f1a'
-            e.currentTarget.style.color = '#8a8ab0'
-            e.currentTarget.style.borderColor = '#1a1a2e'
-          }}
-        >
-          {icon}
-          <span style={{ fontSize: '0.48rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, lineHeight: 1, marginTop: 2 }}>
-            {title}
-          </span>
-        </button>
-      ))}
+      <button
+        id="btn-reset-all"
+        aria-label="Reset and refresh all data"
+        title="Reset and refresh all data"
+        onClick={onReset}
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#0f0f1a',
+          border: '1px solid #1a1a2e',
+          color: '#8a8ab0',
+          cursor: 'pointer',
+          transition: 'all 150ms ease',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          gap: '0.1rem',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = '#1a1a2e'
+          e.currentTarget.style.color = '#e8e8f0'
+          e.currentTarget.style.borderColor = '#2a2a4a'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = '#0f0f1a'
+          e.currentTarget.style.color = '#8a8ab0'
+          e.currentTarget.style.borderColor = '#1a1a2e'
+        }}
+      >
+        <ResetIcon />
+        <span style={{ fontSize: '0.48rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.7, lineHeight: 1, marginTop: 2 }}>
+          Reset
+        </span>
+      </button>
     </div>
   )
 }
 
 CameraControls.propTypes = {
-  onCenter: PropTypes.func.isRequired,
   onReset:  PropTypes.func.isRequired,
 }
 
@@ -332,8 +417,7 @@ CameraControls.propTypes = {
 /**
  * Full-screen globe view with floating panels.
  */
-function GlobeView({ onResetCamera, controlsRef, stats }) {
-  const { satellites: allSatellites, loading: satLoading } = useSatellites()
+function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
   const {
     filteredSatellites,
     filters,
@@ -343,6 +427,19 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
   } = useAppContext()
 
   const [selectedNoradId, setSelectedNoradId] = useState(null)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [legendOpen, setLegendOpen] = useState(false)
+  const [satelliteOpen, setSatelliteOpen] = useState(true)
+
+  // Auto-expand satellite info when a new satellite is selected
+  useEffect(() => {
+    if (selectedNoradId) {
+      setSatelliteOpen(true)
+    } else {
+      setSatelliteOpen(false)
+    }
+  }, [selectedNoradId])
 
   // Sync selectedNoradId when selectedSatellite changes in context (e.g. from SearchBar in Header)
   useEffect(() => {
@@ -358,9 +455,9 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
       if (prev && String(prev.norad_id) === String(noradId)) {
         return null
       }
-      return allSatellites.find((s) => String(s.norad_id) === String(noradId)) ?? null
+      return satellites.find((s) => String(s.norad_id) === String(noradId)) ?? null
     })
-  }, [allSatellites, setSelectedSatellite])
+  }, [satellites, setSelectedSatellite])
 
   const handleCenter = useCallback(() => {
     if (selectedNoradId && controlsRef.current) {
@@ -373,13 +470,28 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
     const handler = (e) => {
       const { norad1 } = e.detail ?? {}
       if (norad1) {
-        const sat = allSatellites.find((s) => String(s.norad_id) === String(norad1))
+        const sat = satellites.find((s) => String(s.norad_id) === String(norad1))
         setSelectedSatellite(sat ?? null)
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('ow:demo-select-satellite'))
+        }, 150)
       }
     }
     window.addEventListener('ow:focus-conjunction', handler)
     return () => window.removeEventListener('ow:focus-conjunction', handler)
-  }, [allSatellites, setSelectedSatellite])
+  }, [satellites, setSelectedSatellite])
+
+  // Listen for global event to open shortcuts collapsible panel in the sidebar
+  useEffect(() => {
+    const handler = () => {
+      setShortcutsOpen(true)
+      // scroll left control deck to top
+      const deck = document.getElementById('left-control-deck')
+      if (deck) deck.scrollTop = 0
+    }
+    window.addEventListener('ow:open-shortcuts', handler)
+    return () => window.removeEventListener('ow:open-shortcuts', handler)
+  }, [])
 
   return (
     <div
@@ -393,52 +505,77 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
         overflow: 'hidden',
       }}
     >
-      {/* ── Full-screen Globe ──────────────────────────────────────────────────── */}
-      <div className="globe-container">
-        <ErrorBoundary label="3D Globe">
-          <ThreeGlobe
-            satellites={allSatellites}
-            positions={filteredSatellites}
-            selectedNoradId={selectedNoradId}
-            onSelect={handleSelect}
-            controlsRef={controlsRef}
+      {/* ── Globe Workspace (keeps floating panels inside globe boundary) ────────── */}
+      <div
+        id="globe-workspace"
+        style={{
+          position: 'relative',
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        {/* ── Full-screen Globe ──────────────────────────────────────────────────── */}
+        <div className="globe-container">
+          <ErrorBoundary label="3D Globe">
+            <ThreeGlobe
+              satellites={satellites}
+              positions={filteredSatellites}
+              selectedNoradId={selectedNoradId}
+              onSelect={handleSelect}
+              controlsRef={controlsRef}
+            />
+          </ErrorBoundary>
+
+          {/* Top-right camera controls */}
+          <CameraControls
+            onReset={onResetAll}
           />
-        </ErrorBoundary>
+        </div>
 
-        {/* Floating left panel — filters */}
-        <FloatingFilterPanel
-          stats={stats}
-          filters={filters}
-          onChange={setFilters}
-          satellites={filteredSatellites}
-        />
+        {/* ── Left Control Deck (Filters, Legend, Satellite Info) ────────────────── */}
+        <div
+          id="left-control-deck"
+          style={{
+            position: 'absolute',
+            left: 24,
+            top: 24,
+            bottom: 24,
+            width: 280,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            zIndex: 40,
+            overflowY: 'auto',
+            pointerEvents: 'none',
+            scrollbarWidth: 'none', /* Firefox */
+          }}
+        >
+          <FloatingFilterPanel
+            stats={stats}
+            filters={filters}
+            onChange={setFilters}
+            satellites={filteredSatellites}
+            shortcutsOpen={shortcutsOpen}
+            setShortcutsOpen={setShortcutsOpen}
+            filtersOpen={filtersOpen}
+            setFiltersOpen={setFiltersOpen}
+            legendOpen={legendOpen}
+            setLegendOpen={setLegendOpen}
+          />
 
-        {/* Top-right camera controls */}
-        <CameraControls
-          onCenter={handleCenter}
-          onReset={onResetCamera}
-        />
-
-        {/* SatelliteInfo — bottom-left when a satellite is selected */}
-        {selectedNoradId && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '1.25rem',
-              left: 24,
-              width: 280,
-              zIndex: 20,
-              maxHeight: '45vh',
-              overflowY: 'auto',
-            }}
-          >
-            <SatelliteInfo noradId={selectedNoradId} />
-          </div>
-        )}
+          {selectedNoradId && (
+            <SatelliteInfo
+              noradId={selectedNoradId}
+              isOpen={satelliteOpen}
+              onToggle={() => setSatelliteOpen(!satelliteOpen)}
+            />
+          )}
+        </div>
 
         {/* Charts — bottom-right, only shown when satellite selected */}
         {selectedNoradId && (
           <div
+            id="selected-satellite-charts"
             style={{
               position: 'absolute',
               bottom: '1.25rem',
@@ -492,9 +629,10 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
 }
 
 GlobeView.propTypes = {
-  onResetCamera: PropTypes.func.isRequired,
+  onResetAll:    PropTypes.func.isRequired,
   controlsRef:   PropTypes.object.isRequired,
   stats:         PropTypes.object,
+  satellites:    PropTypes.array.isRequired,
 }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
@@ -510,6 +648,7 @@ function AlertsView({ conjunctions }) {
         background: 'var(--space-bg)',
         width: '100%',
         flex: 1,
+        overflowY: 'auto',
       }}
     >
       <AlertPanel
@@ -536,13 +675,53 @@ function AppInner() {
   const controlsRef = useRef(null)
   const [stats, setStats]               = useState(null)
   const [conjunctions, setConjunctions] = useState([])
+  const {
+    setActiveNav,
+    setSelectedSatellite,
+    setActiveAlert,
+    setFilters,
+    setShowDebrisOnly,
+    alerts: liveAlerts,
+  } = useAppContext()
 
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
-  const { satellites } = useSatellites()
+  const { satellites, refetch: refetchSatellites } = useSatellites()
 
-  const handleResetCamera = useCallback(() => {
+  useKeyboardShortcuts({
+    onToggleDemoMode: toggleDemo,
+    onOpenShortcuts: () => {
+      setActiveNav('dashboard')
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('ow:open-shortcuts'))
+      }, 50)
+    }
+  })
+
+  const handleResetAll = useCallback(() => {
+    // 1. Reset Camera
     controlsRef.current?.reset()
-  }, [])
+
+    // 2. Clear selections
+    setSelectedSatellite(null)
+    setActiveAlert(null)
+
+    // 3. Reset filters
+    setFilters({
+      types: ['payload', 'debris', 'rocket body', 'unknown'],
+      minAltitude: 0,
+      maxAltitude: 40000,
+    })
+    setShowDebrisOnly(false)
+
+    // 4. Refresh API data
+    refetchSatellites()
+    fetchStats()
+      .then(setStats)
+      .catch((e) => console.error('[App] fetchStats error:', e))
+    fetchConjunctions()
+      .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+      .catch((e) => console.error('[App] fetchConjunctions error:', e))
+  }, [setSelectedSatellite, setActiveAlert, setFilters, setShowDebrisOnly, refetchSatellites])
 
   useEffect(() => {
     fetchStats()
@@ -556,18 +735,37 @@ function AppInner() {
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
 
+  // Merge live WebSocket alerts with static historical conjunctions
+  const mergedConjunctions = useMemo(() => {
+    const map = new Map()
+    conjunctions.forEach((c) => {
+      const id = c.id ?? c.conjunction_id
+      if (id != null) map.set(String(id), c)
+    })
+    liveAlerts.forEach((a) => {
+      const id = a.id ?? a.conjunction_id
+      if (id != null) map.set(String(id), a)
+    })
+    return Array.from(map.values()).sort((a, b) => {
+      const ta = new Date(a.approach_time ?? a.tca ?? 0).getTime()
+      const tb = new Date(b.approach_time ?? b.tca ?? 0).getTime()
+      return tb - ta
+    })
+  }, [conjunctions, liveAlerts])
+
   return (
     <>
       <MainLayout demoEnabled={demoEnabled} onToggleDemo={toggleDemo}>
         {({ activeView }) => {
           if (activeView === 'alerts') {
-            return <AlertsView conjunctions={conjunctions} />
+            return <AlertsView conjunctions={mergedConjunctions} />
           }
           return (
             <GlobeView
-              onResetCamera={handleResetCamera}
+              onResetAll={handleResetAll}
               controlsRef={controlsRef}
               stats={stats}
+              satellites={satellites}
             />
           )
         }}

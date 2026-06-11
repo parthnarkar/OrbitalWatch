@@ -1,88 +1,151 @@
-# OrbitalWatch Frontend
+# 🛰️ OrbitalWatch Frontend
 
-OrbitalWatch is a modern, high-performance, real-time Space Situational Awareness (SSA) dashboard that tracks orbiting objects, calculates collision risks (conjunctions), and visualizes satellites on an interactive 3D Earth.
+OrbitalWatch is a modern, high-performance, real-time Space Situational Awareness (SSA) dashboard that tracks orbiting objects, calculates collision risks (conjunctions), and visualizes satellites on an interactive 3D WebGL Earth.
 
-The frontend is built using **React 19**, **Vite 6**, **Three.js**, **React Three Fiber (R3F)**, and **Recharts**.
+The frontend is built using **React 19**, **Vite 6**, **Three.js**, **React Three Fiber (R3F)**, **Tailwind CSS v4**, and **Recharts**.
 
 ---
 
-## 🚀 Getting Started
+## 🏗️ Architecture & Component Flow
 
-### Prerequisites
+```mermaid
+graph TD
+    subgraph Core Shell
+        Main[src/main.jsx] --> App[src/App.jsx]
+        App --> Context[src/context/AppContext.jsx]
+        Context --> Layout[src/components/Layout/MainLayout.jsx]
+    end
 
-Ensure you have [Node.js](https://nodejs.org/) (v18.0.0 or higher) and [npm](https://www.npmjs.com/) installed on your machine.
+    subgraph Views
+        Layout -->|Nav: dashboard| GV[src/App.jsx: GlobeView]
+        Layout -->|Nav: alerts| AV[src/App.jsx: AlertsView]
+    end
 
-### Installation
+    subgraph Globe View Elements
+        GV --> TG[src/components/Globe/ThreeGlobe.jsx]
+        GV --> FFP[Floating Filter Panel]
+        GV --> CC[Camera Controls]
+        GV --> SI[src/components/Dashboard/SatelliteInfo.jsx]
+        GV --> Chart1[src/components/Dashboard/AltitudeChart.jsx]
+        GV --> Chart2[src/components/Dashboard/TypeDistribution.jsx]
+    end
 
-Clone the repository and navigate to the frontend directory:
+    subgraph Alerts View Elements
+        AV --> AP[src/components/Dashboard/AlertPanel.jsx]
+        AV --> AD[src/components/Dashboard/AlertDetail.jsx]
+    end
 
+    subgraph Real-Time & API
+        Context --> useWS[src/hooks/useWebSocket.js]
+        useWS --> WS[src/services/websocket.js]
+        Context --> API[src/services/api.js]
+    end
+```
+
+### Component Breakdown
+*   **App Root ([src/App.jsx](src/App.jsx))**: Handles primary routing layout switches (Globe vs Alerts), wraps global overlays, and mounts controls.
+*   **State Provider ([src/context/AppContext.jsx](src/context/AppContext.jsx))**: Serves as the central state hub. Exposes real-time satellite locations, conjunction alert histories, filters, coordinate caches, and the globally active selection profiles.
+*   **3D WebGL Globe ([src/components/Globe/ThreeGlobe.jsx](src/components/Globe/ThreeGlobe.jsx))**: Implemented using React Three Fiber. Renders the textured Earth, atmosphere glow, active orbit trajectory lines, and high-performance point clouds for 500+ tracking elements. Includes hover tooltips, click selection, and camera-following modes.
+*   **Real-time WebSocket Hook ([src/hooks/useWebSocket.js](src/hooks/useWebSocket.js))**: Manages the socket.io event lifecycle, updating coordinate buffers and appending incoming critical collision warnings. Includes an active heartbeat check (reconnects after 70s of silence).
+*   **Dashboard Panels ([src/components/Dashboard](src/components/Dashboard/))**:
+    *   `SatelliteInfo`: Details NORAD metadata, launch year, country of origin, altitude, velocity, and SGP4 TLE lines.
+    *   `AlertPanel` & `AlertDetail`: Renders conjunction warnings (approach timing, miss distance, risk probability) and supports focusing coordinates on the 3D globe.
+    *   `AltitudeChart` & `TypeDistribution`: Data visualizations built on `Recharts` for live altitudes (Area Chart) and catalog classification counts (Pie Chart).
+    *   `DemoMode`: Automated simulation flow that guides the user through active satellites and conjunction events.
+
+---
+
+## 🛠️ Tech Stack
+
+- **UI Framework**: React 19 (Functional Components + Context API)
+- **Build System**: Vite 6 + ESBuild
+- **Styling**: Tailwind CSS v4 (native build integration)
+- **3D Graphics**: Three.js + React Three Fiber (R3F) + @react-three/drei
+- **Real-Time Client**: Socket.IO Client (v4)
+- **HTTP Client**: Axios (configured with interceptors)
+- **Charts**: Recharts
+- **Testing**: Vitest + React Testing Library + JSDom
+
+---
+
+## ⚙️ Environment Variables
+
+The application uses Vite-specific environment configurations. Update variables in your `.env`, `.env.local` or `.env.production` files:
+
+| Variable | Description | Local Default |
+| :--- | :--- | :--- |
+| `VITE_API_URL` | Base URL of the backend REST API | `http://localhost:8000/api` |
+| `VITE_WS_URL` | Base URL of the backend WebSocket server | `http://localhost:8000` |
+
+---
+
+## 🚀 Setup & Local Development
+
+### 1. Prerequisites
+Ensure you have [Node.js](https://nodejs.org/) (v18.0.0 or higher) and [npm](https://www.npmjs.com/) installed.
+
+### 2. Install Dependencies
 ```bash
-cd frontend
 npm install
 ```
 
-### Development Server
-
-Start the local development server with Hot Module Replacement (HMR):
-
+### 3. Run Development Server
 ```bash
 npm run dev
 ```
+Once started, the dashboard is accessible at `http://localhost:5173`.
 
-Once running, open [http://localhost:5173](http://localhost:5173) in your browser to view the application.
+### 4. Code Quality & Formatting
+Run the linter to verify syntax correctness:
+```bash
+npm run lint
+```
+
+### 5. Run Unit Tests
+Validate component integrity and hooks via Vitest:
+```bash
+npm run test
+```
 
 ---
 
-## 📦 Build & Production
+## 📦 Build & Production Deployment
 
-To compile the application into static assets optimized for production:
-
+To compile the application into fully optimized static assets:
 ```bash
 npm run build
 ```
+The bundled files will write to the `dist/` directory, ready to be hosted on Netlify, Vercel, AWS S3, or GitHub Pages.
 
-This will output all bundled, minified code to the `dist/` directory, which can be deployed to any static site hosting provider (e.g., Vercel, Netlify, AWS S3).
-
-To preview the production build locally:
-
+To run a preview of the production build locally:
 ```bash
 npm run preview
 ```
 
 ---
 
-## ⚙️ Environment Variables
+## 🎹 Keyboard Shortcuts
 
-The application uses Vite environment variables. You can configure them in `.env`, `.env.local`, or `.env.production` files.
+Accelerate dashboard interaction with these built-in keyboard hotkeys:
 
-| Variable | Description | Default / Example |
-| :--- | :--- | :--- |
-| `VITE_API_URL` | Base URL of the backend REST API | `/api` or `http://localhost:8000/api` |
-| `VITE_WS_URL` | Base URL of the backend WebSocket server | `/` or `ws://localhost:8000` |
+| Key | Action |
+| :---: | :--- |
+| `/` | Focus search bar input |
+| `g` | Switch view to 3D Globe |
+| `a` | Switch view to Conjunction Alerts table |
+| `f` | Lock/Follow camera target to selected satellite |
+| `d` | Toggle automated Demo Mode |
+| `Esc` | Close any open panels, cards, or overlays |
+| `?` | Open keyboard shortcut references modal |
 
 ---
 
 ## 🌐 Browser Support
 
-OrbitalWatch uses modern 3D graphics (WebGL via Three.js), CSS Grid/Flexbox, and modern JS syntax. It supports the latest **two versions** of all major web browsers:
-
-*   **Google Chrome** (and Chromium-based browsers like Edge, Brave, Opera)
+This dashboard relies on **WebGL** to render the interactive 3D globe and CSS Grid/Flexbox layouts. 
+*   **Google Chrome** (and Chromium-based browsers like Microsoft Edge, Brave, Opera)
 *   **Mozilla Firefox**
 *   **Apple Safari** (macOS & iOS)
 
 > [!IMPORTANT]
-> Make sure WebGL is enabled in your browser settings to render the 3D globe properly.
-
----
-
-## 🎹 Keyboard Shortcuts
-
-You can control the dashboard quickly using the following keyboard hotkeys:
-
-*   `/` — Focus Search Bar
-*   `a` — Switch to Conjunction Alerts View
-*   `g` — Switch to Globe View
-*   `f` — Toggle following/locking camera to the selected satellite
-*   `d` — Toggle Demo Mode
-*   `Escape` — Close any open overlays or panels
-*   `?` — Open Keyboard Shortcuts Help Modal
+> Ensure **WebGL hardware acceleration** is enabled in your browser settings to prevent frame rate drops during 3D point cloud rendering.
