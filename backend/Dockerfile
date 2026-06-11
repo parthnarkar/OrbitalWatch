@@ -11,10 +11,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY app.py ./
+COPY alembic.ini ./
+COPY alembic/ ./alembic/
+COPY start.sh ./
+RUN chmod +x start.sh
 
 RUN useradd -m -u 1000 orbital && chown -R orbital:orbital /app
 USER orbital
 
 EXPOSE 8000
 
-CMD ["python", "app.py"]
+CMD ["./start.sh"]

@@ -6,6 +6,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import PropTypes from 'prop-types'
 import { X } from 'lucide-react'
+import { useAppContext } from '../../context/AppContext.jsx'
+
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -145,6 +147,7 @@ DetailRow.propTypes = { label: PropTypes.string, value: PropTypes.string }
 function AlertDetail({ conjunction, onClose }) {
   const [show3DPreview, setShow3DPreview] = useState(false)
   const [timeStr, setTimeStr] = useState('')
+  const { setActiveNav } = useAppContext()
 
   // Live countdown tick
   useEffect(() => {
@@ -166,13 +169,16 @@ function AlertDetail({ conjunction, onClose }) {
 
   const handle3DPreview = useCallback(() => {
     setShow3DPreview((v) => !v)
-    // Emit custom event so ThreeGlobe can pick up both satellites
+    setActiveNav('dashboard')
+    // Emit custom event so ThreeGlobe can pick up both satellites after mount delay
     const norad1 = conjunction?.sat1_norad_id ?? conjunction?.satellite1_norad ?? conjunction?.norad1
     const norad2 = conjunction?.sat2_norad_id ?? conjunction?.satellite2_norad ?? conjunction?.norad2
     if (norad1 || norad2) {
-      window.dispatchEvent(new CustomEvent('ow:focus-conjunction', { detail: { norad1, norad2 } }))
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('ow:focus-conjunction', { detail: { norad1, norad2 } }))
+      }, 100)
     }
-  }, [conjunction])
+  }, [conjunction, setActiveNav])
 
   if (!conjunction) return null
 

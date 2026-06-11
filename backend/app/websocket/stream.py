@@ -23,10 +23,15 @@ if "*" in cors_origins:
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
 
 
+last_broadcast_positions: list[dict[str, object]] = []
+
+
 @sio.on("connect")
 async def connect(sid: str, environ: dict) -> None:
     await manager.connect(sid, environ)
     await sio.emit("connected", {"status": "ok"}, to=sid)
+    if last_broadcast_positions:
+        await sio.emit("satellite_positions", last_broadcast_positions, to=sid)
 
 
 @sio.on("disconnect")
@@ -37,6 +42,8 @@ async def disconnect(sid: str) -> None:
 @sio.on("subscribe_satellites")
 async def subscribe_satellites(sid: str, data: dict | None = None) -> None:
     await sio.emit("subscription_updated", {"status": "ok", "norad_ids": (data or {}).get("norad_ids", [])}, to=sid)
+    if last_broadcast_positions:
+        await sio.emit("satellite_positions", last_broadcast_positions, to=sid)
 
 
 async def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
@@ -60,6 +67,7 @@ async def _position_payload(satellite: SatelliteModel) -> dict[str, object] | No
 
 
 async def broadcast_positions() -> None:
+    global last_broadcast_positions
     while True:
         try:
             async with AsyncSessionLocal() as session:
@@ -67,6 +75,7 @@ async def broadcast_positions() -> None:
                 satellites = list(result.scalars().all())
             payloads = await asyncio.gather(*[_position_payload(satellite) for satellite in satellites])
             data = [payload for payload in payloads if payload is not None]
+            last_broadcast_positions = data
             if manager.get_active_connections():
                 await sio.emit("satellite_positions", data)
         except asyncio.CancelledError:
@@ -74,6 +83,7 @@ async def broadcast_positions() -> None:
         except Exception:
             logger.exception("Position broadcast failed")
         await asyncio.sleep(60)
+
 
 
 async def listen_for_alerts(redis: Redis | None) -> None:

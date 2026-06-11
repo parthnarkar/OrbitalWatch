@@ -9,7 +9,11 @@ from sqlalchemy.orm import declarative_base
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.DATABASE_URL, echo=False)
+engine_args = {}
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine_args["connect_args"] = {"timeout": 15}
+
+engine = create_async_engine(settings.DATABASE_URL, echo=False, **engine_args)
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base(metadata=MetaData())
 
@@ -20,11 +24,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    from app.models import conjunction  # noqa: F401
-    from app.models import satellite  # noqa: F401
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
 
 
 def utcnow() -> datetime:
