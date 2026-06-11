@@ -135,9 +135,9 @@ function StatsCards({ stats }) {
     return () => clearInterval(interval)
   }, [stats?.last_scan])
 
-  const total  = stats?.total  ?? 0
-  const debris = stats?.debris ?? 0
-  const alerts = stats?.alerts ?? 0
+  const total  = stats?.total  ?? stats?.total_satellites ?? 0
+  const debris = stats?.debris ?? stats?.debris_count ?? stats?.total_debris ?? 0
+  const alerts = stats?.alerts ?? stats?.active_conjunctions ?? 0
   const hasAlerts = alerts > 0
 
   return (
@@ -186,10 +186,14 @@ function StatsCards({ stats }) {
 StatsCards.propTypes = {
   /** Dashboard-level statistics object */
   stats: PropTypes.shape({
-    total:     PropTypes.number,
-    debris:    PropTypes.number,
-    alerts:    PropTypes.number,
-    last_scan: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
+    total:             PropTypes.number,
+    total_satellites:  PropTypes.number,
+    debris:            PropTypes.number,
+    debris_count:      PropTypes.number,
+    total_debris:      PropTypes.number,
+    alerts:            PropTypes.number,
+    active_conjunctions: PropTypes.number,
+    last_scan:         PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
   }),
 }
 

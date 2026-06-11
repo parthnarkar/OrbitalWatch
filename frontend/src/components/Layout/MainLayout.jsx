@@ -12,13 +12,12 @@ import { useAppContext } from '../../context/AppContext.jsx'
 /**
  * @param {Object} props
  * @param {import('react').ReactNode | Function} props.children - Render prop receives { activeView, activeNav }
- * @param {Function} [props.onResetCamera]
  * @param {Function} [props.onNavChange] - Notified when active nav changes
  * @param {boolean}  [props.demoEnabled]
  * @param {Function} [props.onToggleDemo]
  * @returns {JSX.Element}
  */
-function MainLayout({ children, onResetCamera, onNavChange, demoEnabled, onToggleDemo }) {
+function MainLayout({ children, onNavChange, demoEnabled, onToggleDemo }) {
   const { activeNav, setActiveNav, activeView, connected, alerts } = useAppContext()
 
   const handleNavChange = (id) => {
@@ -52,12 +51,11 @@ function MainLayout({ children, onResetCamera, onNavChange, demoEnabled, onToggl
       >
         <Header
           connected={connected}
-          onResetCamera={onResetCamera}
           demoEnabled={demoEnabled}
           onToggleDemo={onToggleDemo}
         />
 
-        <main id="main-content" role="main" style={{ flex: 1, overflow: 'hidden' }}>
+        <main id="main-content" role="main" style={{ flex: 1 }}>
           {typeof children === 'function' ? children({ activeView, activeNav }) : children}
         </main>
       </div>
@@ -65,7 +63,6 @@ function MainLayout({ children, onResetCamera, onNavChange, demoEnabled, onToggl
       {/* ── Mobile Bottom Sheet (visible only on < 768px via CSS) ─────────────── */}
       <MobileSheet
         alertCount={alerts?.length ?? 0}
-        connected={connected}
       />
     </div>
   )
@@ -73,14 +70,12 @@ function MainLayout({ children, onResetCamera, onNavChange, demoEnabled, onToggl
 
 MainLayout.propTypes = {
   children:      PropTypes.oneOfType([PropTypes.node, PropTypes.func]).isRequired,
-  onResetCamera: PropTypes.func,
   onNavChange:   PropTypes.func,
   demoEnabled:   PropTypes.bool,
   onToggleDemo:  PropTypes.func,
 }
 
 MainLayout.defaultProps = {
-  onResetCamera: null,
   onNavChange:   null,
   demoEnabled:   false,
   onToggleDemo:  null,

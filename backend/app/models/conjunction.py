@@ -18,6 +18,7 @@ class ConjunctionModel(Base):
     miss_distance_km: Mapped[float] = mapped_column(Float, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(10), nullable=False)
     probability: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    relative_velocity: Mapped[float] = mapped_column(Float, default=7.5, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
 

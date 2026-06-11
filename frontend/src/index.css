@@ -168,6 +168,22 @@ code {
   background-clip: text;
 }
 
+/* ThreeGlobe container responsive height */
+.globe-container {
+  width: 100%;
+  height: 55vh;
+  min-height: 350px;
+  max-height: 600px;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .globe-container {
+    height: 40vh;
+    min-height: 300px;
+  }
+}
+
 /* ── Card Component ───────────────────────────────────── */
 .card {
   background: var(--space-card);
@@ -364,4 +380,16 @@ input::placeholder {
   #main-layout > div { margin-left: 0 !important; }
   body { background: #000 !important; }
   canvas { width: 100vw !important; height: 100vh !important; }
+}
+
+/* ── Responsive Utilities ──────────────────────────────────── */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+@media (max-width: 480px) {
+  .hide-xs {
+    display: none !important;
+  }
 }

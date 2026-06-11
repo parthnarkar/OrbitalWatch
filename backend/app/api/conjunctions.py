@@ -28,6 +28,7 @@ async def serialize_conjunction(db: AsyncSession, conjunction: ConjunctionModel)
         miss_distance_km=conjunction.miss_distance_km,
         risk_level=conjunction.risk_level,
         probability=conjunction.probability,
+        relative_velocity=conjunction.relative_velocity,
     )
 
 

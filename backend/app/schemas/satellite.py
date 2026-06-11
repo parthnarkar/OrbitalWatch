@@ -20,6 +20,12 @@ class SatelliteCreate(SatelliteBase):
 class SatelliteResponse(SatelliteBase):
     id: int
     created_at: datetime
+    altitude_km: float
+    velocity_kms: float
+    orbital_period_min: float
+    inclination: float
+    launch_date: str
+    country: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,5 +62,6 @@ class ConjunctionResponse(BaseModel):
     miss_distance_km: float
     risk_level: str
     probability: float = Field(ge=0.0)
+    relative_velocity: float = 7.5
 
     model_config = ConfigDict(from_attributes=True)

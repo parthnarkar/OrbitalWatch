@@ -5,29 +5,15 @@
 
 import { useState } from 'react'
 import PropTypes from 'prop-types'
-import { useAppContext } from '../../context/AppContext.jsx'
+
 
 // ── Icon SVGs ──────────────────────────────────────────────────────────────────
-
-const IconSatellite = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="2" />
-    <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14" />
-  </svg>
-)
 
 const IconAlert = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
     <line x1="12" y1="9" x2="12" y2="13" />
     <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-)
-
-const IconSearch = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="11" cy="11" r="8" />
-    <line x1="21" y1="21" x2="16.65" y2="16.65" />
   </svg>
 )
 
@@ -54,15 +40,13 @@ const IconDashboard = () => (
  * @returns {JSX.Element}
  */
 function Sidebar({ activeNav, onNavChange, alertCount, connected }) {
-  const { showDebrisOnly, setShowDebrisOnly } = useAppContext()
+
   const [hovered, setHovered] = useState(/** @type {string|null} */ (null))
 
   /** @type {{ id: string, label: string, icon: () => JSX.Element, view: string }[]} */
   const NAV_LINKS = [
     { id: 'dashboard', label: 'Dashboard',  icon: IconDashboard, view: 'globe' },
     { id: 'alerts',    label: 'Alerts',     icon: IconAlert,     view: 'alerts' },
-    { id: 'satellites',label: 'Satellites', icon: IconSatellite, view: 'globe' },
-    { id: 'search',    label: 'Search',     icon: IconSearch,    view: 'globe' },
   ]
 
   return (
@@ -194,63 +178,7 @@ function Sidebar({ activeNav, onNavChange, alertCount, connected }) {
           })}
         </ul>
 
-        {/* ── Filters ─────────────────────────────────────────────────────────── */}
-        <div style={{ marginTop: '1.5rem' }}>
-          <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--space-text-dim)', letterSpacing: '0.12em', textTransform: 'uppercase', padding: '0 0.5rem 0.75rem' }}>
-            Filters
-          </p>
 
-          <label
-            htmlFor="toggle-debris"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.5rem 0.875rem',
-              cursor: 'pointer',
-              borderRadius: 'var(--radius-md)',
-              transition: 'background var(--transition-fast)',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-          >
-            <div
-              id="toggle-debris"
-              role="checkbox"
-              aria-checked={showDebrisOnly}
-              tabIndex={0}
-              onClick={() => setShowDebrisOnly(!showDebrisOnly)}
-              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') setShowDebrisOnly(!showDebrisOnly) }}
-              style={{
-                width: 36,
-                height: 20,
-                borderRadius: 999,
-                background: showDebrisOnly ? 'var(--space-cyan)' : 'var(--space-border-bright)',
-                position: 'relative',
-                transition: 'background var(--transition-base)',
-                flexShrink: 0,
-                boxShadow: showDebrisOnly ? 'var(--glow-cyan)' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: showDebrisOnly ? 18 : 3,
-                  width: 14,
-                  height: 14,
-                  borderRadius: '50%',
-                  background: 'white',
-                  transition: 'left var(--transition-base)',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                }}
-              />
-            </div>
-            <span style={{ fontSize: '0.875rem', color: 'var(--space-text-muted)' }}>
-              Debris Only
-            </span>
-          </label>
-        </div>
       </nav>
 
       {/* ── Status Footer ─────────────────────────────────────────────────────── */}

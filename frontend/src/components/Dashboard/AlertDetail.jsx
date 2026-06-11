@@ -178,7 +178,8 @@ function AlertDetail({ conjunction, onClose }) {
         window.dispatchEvent(new CustomEvent('ow:focus-conjunction', { detail: { norad1, norad2 } }))
       }, 100)
     }
-  }, [conjunction, setActiveNav])
+    onClose?.()
+  }, [conjunction, setActiveNav, onClose])
 
   if (!conjunction) return null
 

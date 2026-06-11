@@ -3,7 +3,7 @@
  * Wired with charts, FilterBar, live stats, and toast alerts.
  */
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
@@ -19,7 +19,6 @@ import AlertDetail       from './components/Dashboard/AlertDetail.jsx'
 import FilterBar         from './components/Dashboard/FilterBar.jsx'
 import AltitudeChart     from './components/Dashboard/AltitudeChart.jsx'
 import TypeDistribution  from './components/Dashboard/TypeDistribution.jsx'
-import NotificationToast from './components/Dashboard/NotificationToast.jsx'
 import DemoMode, { useDemoMode } from './components/Dashboard/DemoMode.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
@@ -160,10 +159,9 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
       id="globe-dashboard"
       style={{
         position: 'relative',
-        height: 'calc(100vh - var(--header-height))',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
+        width: '100%',
       }}
     >
       {/* FilterBar above ThreeGlobe */}
@@ -172,7 +170,7 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
       </div>
 
       {/* ── Globe (top ~70%) ───────────────────────────────────────────────── */}
-      <div style={{ flex: '0 0 62%', position: 'relative', minHeight: 0 }}>
+      <div className="globe-container">
         <ErrorBoundary label="3D Globe">
           <ThreeGlobe
             satellites={satellites}
@@ -260,27 +258,25 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
         </button>
       </div>
 
-      {/* ── Bottom 38%: StatsCards + SatelliteInfo + Charts ─────────────────── */}
+      {/* ── Bottom: StatsCards + SatelliteInfo + Charts ─────────────────── */}
       <div
         style={{
-          flex: '0 0 38%',
           display: 'flex',
           flexDirection: 'column',
-          minHeight: 0,
           borderTop: '1px solid var(--space-border)',
           background: 'var(--space-bg)',
+          gap: '1rem',
+          paddingBottom: '2rem',
         }}
       >
         <StatsCards stats={stats} />
 
         <div
           style={{
-            flex: 1,
-            padding: '0 1rem 1rem',
-            minHeight: 0,
+            padding: '0 1rem',
             display: 'flex',
             gap: '1rem',
-            overflowY: 'auto',
+            flexWrap: 'wrap',
           }}
         >
           {/* Info Card */}
@@ -311,7 +307,7 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
               <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
                 Altitude Distribution
               </h3>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 0 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                 <AltitudeChart satellites={filteredSatellites} />
               </div>
             </div>
@@ -330,7 +326,7 @@ function GlobeView({ onResetCamera, controlsRef, stats }) {
               <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--space-text-muted)', marginBottom: '8px', letterSpacing: '0.05em' }}>
                 Type Breakdown
               </h3>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 0 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
                 <TypeDistribution satellites={filteredSatellites} />
               </div>
             </div>
@@ -361,10 +357,10 @@ function AlertsView({ conjunctions }) {
     <div
       id="alerts-view"
       style={{
-        height: 'calc(100vh - var(--header-height))',
-        overflow: 'auto',
         padding: '1rem',
         background: 'var(--space-bg)',
+        width: '100%',
+        minHeight: 'calc(100vh - var(--header-height))',
       }}
     >
       <AlertPanel
@@ -396,12 +392,7 @@ function AppInner() {
   const [stats, setStats]               = useState(/** @type {Object|null} */ (null))
   const [conjunctions, setConjunctions] = useState(/** @type {Object[]} */ ([]))
 
-  const {
-    pendingAlerts,
-    clearPendingAlerts,
-    setActiveAlert,
-    setActiveNav,
-  } = useAppContext()
+
 
   // Demo mode (persisted in localStorage)
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
@@ -427,13 +418,11 @@ function AppInner() {
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
 
-  // Limit notifications shown to max 3 at once
-  const visibleAlerts = useMemo(() => pendingAlerts.slice(0, 3), [pendingAlerts])
+
 
   return (
     <>
       <MainLayout
-        onResetCamera={handleResetCamera}
         demoEnabled={demoEnabled}
         onToggleDemo={toggleDemo}
       >
@@ -459,34 +448,7 @@ function AppInner() {
         conjunctions={conjunctions}
       />
 
-      {/* Real-time Toast Notification Container */}
-      {visibleAlerts.length > 0 && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 'calc(var(--header-height) + 12px)',
-            right: '16px',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            pointerEvents: 'none',
-          }}
-        >
-          {visibleAlerts.map((alert) => (
-            <NotificationToast
-              key={alert.id ?? alert.conjunction_id}
-              alert={alert}
-              onDismiss={() => clearPendingAlerts(alert.id ?? alert.conjunction_id)}
-              onClick={() => {
-                setActiveAlert(alert)
-                setActiveNav('alerts')
-                clearPendingAlerts(alert.id ?? alert.conjunction_id)
-              }}
-            />
-          ))}
-        </div>
-      )}
+
     </>
   )
 }

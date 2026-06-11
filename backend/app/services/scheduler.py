@@ -53,6 +53,7 @@ async def run_conjunction_scan() -> None:
                         "miss_distance_km": conjunction.miss_distance_km,
                         "risk_level": conjunction.risk_level,
                         "probability": conjunction.probability,
+                        "relative_velocity": conjunction.relative_velocity,
                     }
 
                     if redis_client is not None:
