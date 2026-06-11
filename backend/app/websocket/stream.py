@@ -15,7 +15,12 @@ from app.services.propagation import propagate_satellite
 from app.websocket.manager import manager
 
 logger = logging.getLogger(__name__)
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=settings.CORS_ORIGINS)
+
+cors_origins = settings.CORS_ORIGINS
+if "*" in cors_origins:
+    cors_origins = "*"
+
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
 
 
 @sio.on("connect")

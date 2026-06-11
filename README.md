@@ -152,3 +152,22 @@ You need **real data** to prove this is not a toy. Use these free sources:**Tabl
 -------------------------------------
 
 ❌ **Do not** build a full ML model for collision prediction. SGP4 + distance thresholds are enough for MVP.❌ **Do not** try to render all 40,000 objects. Start with 200–500. Judges understand MVP scope.❌ **Do not** build user authentication/login. It adds zero value to the core demo.❌ **Do not** use mock data. Use real TLEs. Real satellite names. Real positions.**Bottom line:** You are building a **"Space Traffic Control Dashboard"** — a 3D web app that takes real satellite data, runs orbital physics in Python, and presents it in a way that looks like it belongs at NASA or ISRO. That is your demand. That is what you show.**Ready?** Tell me your team's skill split (who knows Python, who knows React, etc.) and I will assign exact Day 1 tasks to each person.
+
+## Production Deployment Instructions
+
+### Backend (Render Deployment)
+1. Deploy as a **Web Service** using the `Dockerfile` located in the `backend/` directory.
+2. In Render environment settings, configure the following variables:
+   - `DATABASE_URL`: Set this to your PostgreSQL connection string (Render's default starting with `postgres://` or `postgresql://` is automatically parsed and mapped to the required `postgresql+asyncpg://` at runtime).
+   - `REDIS_URL`: If you have a Redis instance, set its URL here (e.g. `redis://...`). If not, the server dynamically falls back to direct Socket.IO WebSocket alerts.
+   - `CORS_ORIGINS`: Set to a JSON array list of allowed origins, e.g., `["https://your-frontend.vercel.app"]` or `["*"]` to allow all.
+   - `RELOAD`: Ensure this is omitted or set to `false`.
+3. Render automatically provisions the `PORT` variable; the app binds to it on startup.
+
+### Frontend (Vercel Deployment)
+1. Deploy the `frontend/` directory to Vercel.
+2. In Vercel Environment Variables, configure:
+   - `VITE_API_URL`: Set to `https://<your-backend-render-app>.onrender.com/api`
+   - `VITE_WS_URL`: Set to `https://<your-backend-render-app>.onrender.com`
+3. Since WebSockets require direct persistent connections, the frontend connects directly to Render via `VITE_WS_URL` to receive real-time streams.
+

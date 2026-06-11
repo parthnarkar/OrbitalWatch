@@ -68,10 +68,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="OrbitalWatch API", version="1.0.0", lifespan=lifespan)
 
+# Wildcard origins do not allow credentials in FastAPI CORSMiddleware
+allow_credentials = True
+if "*" in settings.CORS_ORIGINS:
+    allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -79,6 +84,11 @@ app.add_middleware(
 app.include_router(satellites_router)
 app.include_router(propagate_router)
 app.include_router(conjunctions_router)
+
+
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"message": "Welcome to the OrbitalWatch API"}
 
 
 @app.get("/health")

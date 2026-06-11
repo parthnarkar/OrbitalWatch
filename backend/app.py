@@ -10,6 +10,6 @@ if backend_dir not in sys.path:
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
-    reload = os.getenv("RELOAD", "true").lower() in ("true", "1", "yes")
+    reload = os.getenv("RELOAD", "false").lower() in ("true", "1", "yes")
 
     uvicorn.run("app.main:socket_app", host=host, port=port, reload=reload)
