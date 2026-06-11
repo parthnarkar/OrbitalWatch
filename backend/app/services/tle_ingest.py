@@ -14,17 +14,22 @@ from app.models.satellite import SatelliteModel
 logger = logging.getLogger(__name__)
 
 CELESTRAK_GROUPS: tuple[str, ...] = (
-    "last-30-days",
+    "active",
     "visual",
     "stations",
-    "science",
+    "debris",
+    "1982-092",
+    "1999-025",
     "iridium-33-debris",
     "cosmos-2251-debris",
+    "rocket-body",
+    "geo",
 )
 
 
 async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
     url = f"https://celestrak.org/NORAD/elements/gp.php?GROUP={category}&FORMAT=TLE"
+    print(f"Fetching Celestrak URL: {url}")
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -35,6 +40,10 @@ async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
     except httpx.HTTPError as exc:
         logger.warning("Failed to fetch TLEs for category %s: %s (continuing with other categories)", category, exc)
         return []
+
+    print(f"HTTP Response Status: {response.status_code}")
+    if "Invalid query" in response.text:
+        print(f"Celestrak Error Message for '{category}': {response.text.strip()}")
 
     lines = [line.strip() for line in response.text.splitlines() if line.strip()]
     records: list[dict[str, str]] = []
@@ -47,8 +56,12 @@ async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
             index += 1
             continue
         norad_id = line1[2:7].strip()
+        print(f"Parsed record: {name} (NORAD: {norad_id})")
+        print(f"  Line 1: {line1}")
+        print(f"  Line 2: {line2}")
         records.append({"name": name, "line1": line1, "line2": line2, "norad_id": norad_id})
         index += 3
+    print(f"Total parsed records for category '{category}': {len(records)}")
     return records
 
 
@@ -261,7 +274,7 @@ async def ingest_satellites(db_session: AsyncSession) -> int:
     current_count = len(satellites)
 
     # Re-classify all existing satellites if already seeded
-    if current_count >= 300:
+    if current_count >= 600:
         logger.info("Catalog already seeded with %s satellites. Re-classifying object types for variance.", current_count)
         updated_count = 0
         for satellite in satellites:
@@ -278,55 +291,73 @@ async def ingest_satellites(db_session: AsyncSession) -> int:
 
     ingested_count = 0
     category_limits = {
-        "last-30-days": 150,
+        "active": 150,
         "visual": 150,
         "stations": 50,
-        "science": 150,
-        "iridium-33-debris": 75,
-        "cosmos-2251-debris": 75,
+        "debris": 150,
+        "1982-092": 100,
+        "1999-025": 100,
+        "iridium-33-debris": 100,
+        "cosmos-2251-debris": 100,
+        "rocket-body": 100,
+        "geo": 100,
     }
 
     for category in CELESTRAK_GROUPS:
         try:
             tle_records = await fetch_tle_from_celestrak(category)
-        except Exception:  # pragma: no cover
-            logger.exception("Unexpected error fetching category %s", category)
+            logger.info("Category '%s': fetched %d objects", category, len(tle_records))
+        except Exception as exc:
+            logger.exception("Unexpected error fetching category %s: %s", category, exc)
             continue
 
         limit = category_limits.get(category, 100)
         for record in tle_records[:limit]:
-            result = await db_session.execute(
-                select(SatelliteModel).where(SatelliteModel.norad_id == record["norad_id"])
-            )
-            satellite = result.scalar_one_or_none()
-            object_type = determine_object_type(record["name"], category)
-            if satellite is None:
-                satellite = SatelliteModel(
-                    norad_id=record["norad_id"],
-                    name=record["name"],
-                    object_type=object_type,
-                    tle_line1=record["line1"],
-                    tle_line2=record["line2"],
+            try:
+                result = await db_session.execute(
+                    select(SatelliteModel).where(SatelliteModel.norad_id == record["norad_id"])
                 )
-                db_session.add(satellite)
-                ingested_count += 1
-                continue
+                satellite = result.scalar_one_or_none()
+                
+                # Classification rules:
+                debris_categories = {"debris", "1982-092", "1999-025", "iridium-33-debris", "cosmos-2251-debris"}
+                if category in debris_categories:
+                    object_type = "debris"
+                elif category == "rocket-body":
+                    object_type = "rocket body"
+                else:
+                    object_type = determine_object_type(record["name"], category)
 
-            changed = False
-            if satellite.name != record["name"]:
-                satellite.name = record["name"]
-                changed = True
-            if satellite.object_type != object_type:
-                satellite.object_type = object_type
-                changed = True
-            if satellite.tle_line1 != record["line1"]:
-                satellite.tle_line1 = record["line1"]
-                changed = True
-            if satellite.tle_line2 != record["line2"]:
-                satellite.tle_line2 = record["line2"]
-                changed = True
-            if changed:
-                ingested_count += 1
+                if satellite is None:
+                    satellite = SatelliteModel(
+                        norad_id=record["norad_id"],
+                        name=record["name"],
+                        object_type=object_type,
+                        tle_line1=record["line1"],
+                        tle_line2=record["line2"],
+                    )
+                    db_session.add(satellite)
+                    ingested_count += 1
+                    continue
+
+                changed = False
+                if satellite.name != record["name"]:
+                    satellite.name = record["name"]
+                    changed = True
+                if satellite.object_type != object_type:
+                    satellite.object_type = object_type
+                    changed = True
+                if satellite.tle_line1 != record["line1"]:
+                    satellite.tle_line1 = record["line1"]
+                    changed = True
+                if satellite.tle_line2 != record["line2"]:
+                    satellite.tle_line2 = record["line2"]
+                    changed = True
+                if changed:
+                    ingested_count += 1
+            except Exception as record_exc:
+                logger.error("Error processing record %s in category %s: %s", record.get("norad_id"), category, record_exc)
+                continue
 
     if ingested_count == 0 and current_count == 0:
         logger.info("CelesTrak fetch yielded 0 records and catalog is empty. Seeding fallback TLEs.")

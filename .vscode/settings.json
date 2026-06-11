@@ -1,0 +1,7 @@
+{
+    "python.defaultInterpreterPath": "C:\\project\\orbital\\OrbitalWatch\\backend\\.venv\\Scripts\\python.exe",
+    "python.analysis.extraPaths": [
+        "C:\\project\\orbital\\OrbitalWatch\\backend"
+    ],
+    "python.analysis.typeCheckingMode": "basic"
+}
