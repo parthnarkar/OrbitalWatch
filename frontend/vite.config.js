@@ -1,3 +1,4 @@
+/* global process */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -35,11 +36,10 @@ export default defineConfig(async () => {
       setupFiles: './src/setupTests.js',
       server: {
         deps: {
-          inline: ['@csstools/css-calc']
+          inline: ['@csstools/css-calc', '@asamuzakjp/css-color']
         }
       }
     },
-
 
     // Target modern browsers for smaller output
     build: {
@@ -66,15 +66,38 @@ export default defineConfig(async () => {
       port: 5173,
       proxy: {
         '/api': {
-          target: 'http://localhost:8000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              console.log('[Vite Proxy Error] /api:', err.message)
+            })
+          }
         },
         '/socket.io': {
-          target: 'http://localhost:8000',
+          target: 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
           ws: true,
+          configure: (proxy) => {
+            proxy.on('error', (err, req, resOrSocket) => {
+              console.log('[Vite Proxy Error] /socket.io:', err.message)
+              if (resOrSocket && typeof resOrSocket.writeHead !== 'function') {
+                resOrSocket.destroy()
+              }
+            })
+            proxy.on('open', (proxySocket) => {
+              proxySocket.on('error', (err) => {
+                console.log('[Vite Target WS Socket Error]:', err.message)
+              })
+            })
+            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+              socket.on('error', (err) => {
+                console.log('[Vite Client WS Socket Error]:', err.message)
+              })
+            })
+          }
         },
       },
     },

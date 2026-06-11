@@ -181,8 +181,7 @@ function SatelliteInfo({ noradId }) {
     border: '1px solid var(--space-border)',
     borderRadius: 'var(--radius-lg)',
     padding: '1.25rem',
-    height: '100%',
-    overflow: 'auto',
+    minHeight: '200px',
   }
 
   // ── Empty state ─────────────────────────────────────────────────────────────
@@ -228,7 +227,7 @@ function SatelliteInfo({ noradId }) {
   const tc = typeColor(satellite.object_type ?? satellite.type)
   const altitude = satellite.altitude_km ?? satellite.altitude
   const velocity = satellite.velocity_kms ?? satellite.velocity
-  const period   = satellite.period ?? satellite.orbital_period
+  const period   = satellite.period ?? satellite.orbital_period ?? satellite.orbital_period_min
 
   return (
     <div id="satellite-info-panel" style={cardStyle}>
@@ -277,7 +276,7 @@ function SatelliteInfo({ noradId }) {
       </div>
 
       {/* ── Stats grid ────────────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem' }}>
         <StatCell
           label="Altitude"
           value={altitude != null ? `${Number(altitude).toFixed(0)} km` : null}

@@ -1,24 +1,37 @@
 import { render } from '@testing-library/react';
-import React from 'react';
-import { describe, it, expect } from 'vitest';
+
+import { describe, it, expect, vi } from 'vitest';
 import App from './App';
 
-// We mock the WebSocket and Canvas components which are complex and need WebGL context
-vi.mock('@react-three/fiber', () => ({
-  Canvas: ({ children }) => <div data-testid="mock-canvas">{children}</div>,
-  useFrame: () => {},
+// Mock the 3D globe component to avoid loading WebGL/Three.js context in tests
+vi.mock('./components/Globe/ThreeGlobe', () => ({
+  default: () => <div data-testid="mock-three-globe">Mock ThreeGlobe</div>,
 }));
 
-vi.mock('socket.io-client', () => {
-  return {
-    io: () => ({
-      on: vi.fn(),
-      off: vi.fn(),
-      emit: vi.fn(),
-      disconnect: vi.fn(),
-    }),
-  };
-});
+// Mock the API services to avoid making real HTTP/axios calls
+vi.mock('./services/api', () => ({
+  fetchStats: vi.fn().mockReturnValue(new Promise(() => {})),
+  fetchConjunctions: vi.fn().mockReturnValue(new Promise(() => {})),
+}));
+
+// Mock socket.io-client
+vi.mock('socket.io-client', () => ({
+  io: () => ({
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+    disconnect: vi.fn(),
+  }),
+}));
+
+// Mock the useSatellites hook
+vi.mock('./hooks/useSatellites', () => ({
+  default: () => ({
+    satellites: [],
+    loading: false,
+    error: null,
+  }),
+}));
 
 describe('App', () => {
   it('renders without crashing', () => {
@@ -26,3 +39,4 @@ describe('App', () => {
     expect(container).toBeDefined();
   });
 });
+

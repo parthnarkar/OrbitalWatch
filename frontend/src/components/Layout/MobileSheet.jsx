@@ -4,7 +4,6 @@
  * All tap targets are min 44×44px per WCAG 2.1 2.5.5.
  */
 
-import { useState } from 'react'
 import PropTypes from 'prop-types'
 import { useAppContext } from '../../context/AppContext.jsx'
 
@@ -13,8 +12,6 @@ import { useAppContext } from '../../context/AppContext.jsx'
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Globe',   emoji: '🌍' },
   { id: 'alerts',    label: 'Alerts',  emoji: '⚠️' },
-  { id: 'satellites',label: 'Objects', emoji: '🛰️' },
-  { id: 'search',    label: 'Search',  emoji: '🔍' },
 ]
 
 // ── MobileSheet Component ─────────────────────────────────────────────────────
@@ -29,9 +26,8 @@ const NAV_ITEMS = [
  * }} props
  * @returns {JSX.Element}
  */
-function MobileSheet({ alertCount, connected }) {
+function MobileSheet({ alertCount }) {
   const { activeNav, setActiveNav } = useAppContext()
-  const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
     <>
@@ -39,9 +35,7 @@ function MobileSheet({ alertCount, connected }) {
       <style>{`
         /* Only show on mobile */
         @media (min-width: 768px) {
-          #mobile-sheet-bar,
-          #mobile-sheet-overlay,
-          #mobile-sheet-panel { display: none !important; }
+          #mobile-sheet-bar { display: none !important; }
         }
         @media (max-width: 767px) {
           /* hide the desktop sidebar on mobile */
@@ -144,151 +138,17 @@ function MobileSheet({ alertCount, connected }) {
             </button>
           )
         })}
-
-        {/* "More" button opens the full-featured sheet */}
-        <button
-          id="mobile-nav-more"
-          aria-label="More options"
-          aria-expanded={sheetOpen}
-          onClick={() => setSheetOpen(true)}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.2rem',
-            minWidth: 60,
-            minHeight: 44,
-            padding: '0.5rem 0.75rem',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--space-text-muted)',
-          }}
-        >
-          <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>☰</span>
-          <span style={{ fontSize: '0.65rem', fontWeight: 500 }}>More</span>
-        </button>
       </nav>
-
-      {/* ── Sheet overlay + panel ─────────────────────────────────────────────── */}
-      {sheetOpen && (
-        <>
-          <div
-            id="mobile-sheet-overlay"
-            aria-hidden="true"
-            onClick={() => setSheetOpen(false)}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              zIndex: 95,
-              animation: 'fadeIn 0.2s ease',
-            }}
-          />
-          <div
-            id="mobile-sheet-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigation options"
-            style={{
-              position: 'fixed',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: '#0f0f1a',
-              borderTop: '1px solid var(--space-border)',
-              borderRadius: '20px 20px 0 0',
-              padding: '1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px))',
-              zIndex: 96,
-              animation: 'slideUp 0.3s cubic-bezier(0.16,1,0.3,1) forwards',
-            }}
-          >
-            {/* Sheet handle */}
-            <div
-              style={{
-                width: 40,
-                height: 4,
-                borderRadius: 2,
-                background: 'var(--space-border-bright)',
-                margin: '0 auto 1.25rem',
-              }}
-            />
-
-            {/* Connection status */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-              <div
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: connected ? 'var(--space-green)' : 'var(--space-red)',
-                  boxShadow: connected ? 'var(--glow-green)' : 'var(--glow-red)',
-                  animation: connected ? 'pulse-dot 2s ease-in-out infinite' : 'none',
-                }}
-              />
-              <span style={{ fontSize: '0.8rem', color: connected ? 'var(--space-green)' : 'var(--space-red)', fontWeight: 600 }}>
-                {connected ? 'Live Stream Connected' : 'Stream Offline'}
-              </span>
-            </div>
-
-            {/* Full nav list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-              {NAV_ITEMS.map(({ id, label, emoji }) => {
-                const isActive = activeNav === id
-                return (
-                  <button
-                    key={id}
-                    onClick={() => { setActiveNav(id); setSheetOpen(false) }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.875rem',
-                      padding: '0.875rem 1rem',
-                      minHeight: 52,
-                      borderRadius: 12,
-                      background: isActive ? 'rgba(0,212,255,0.1)' : 'transparent',
-                      border: isActive ? '1px solid rgba(0,212,255,0.25)' : '1px solid transparent',
-                      color: isActive ? 'var(--space-cyan)' : 'var(--space-text-muted)',
-                      cursor: 'pointer',
-                      transition: 'all var(--transition-fast)',
-                      width: '100%',
-                      textAlign: 'left',
-                      fontSize: '0.95rem',
-                      fontWeight: isActive ? 600 : 400,
-                    }}
-                  >
-                    <span style={{ fontSize: '1.25rem' }}>{emoji}</span>
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* slideUp animation for the sheet panel */}
-      <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to   { transform: translateY(0);    }
-        }
-      `}</style>
     </>
   )
 }
 
 MobileSheet.propTypes = {
   alertCount: PropTypes.number,
-  connected:  PropTypes.bool,
 }
 
 MobileSheet.defaultProps = {
   alertCount: 0,
-  connected:  false,
 }
 
 export default MobileSheet

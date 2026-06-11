@@ -3,7 +3,7 @@
  * Provides selected satellite, active alerts, navigation state, filters, and filtered satellites.
  */
 
-import { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useMemo, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import useWebSocket from '../hooks/useWebSocket.js'
 
@@ -35,8 +35,6 @@ export function AppProvider({ children }) {
   const activeView = useMemo(() => {
     const VIEW_MAP = {
       dashboard: 'globe',
-      satellites: 'globe',
-      search: 'globe',
       alerts: 'alerts',
     }
     return VIEW_MAP[activeNav] ?? 'globe'
@@ -64,8 +62,12 @@ export function AppProvider({ children }) {
     }
   }, [positions])
 
-  // Settings
-  const [autoSwitchOnHighRisk, setAutoSwitchOnHighRisk] = useState(true)
+  // Clear activeAlert when navigating away from alerts view to prevent spontaneous opening
+  useEffect(() => {
+    if (activeNav !== 'alerts') {
+      setActiveAlert(null)
+    }
+  }, [activeNav])
 
   // Filters State
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
@@ -94,23 +96,6 @@ export function AppProvider({ children }) {
     })
   }, [positions, filters, showDebrisOnly])
 
-  // Auto-switch to Alerts view when a HIGH risk alert arrives and user is on globe view
-  const lastHandledAlertId = useRef(null)
-  const latestAlert = alerts[0]
-
-  useEffect(() => {
-    if (latestAlert && autoSwitchOnHighRisk && activeView === 'globe') {
-      const alertId = latestAlert.id ?? latestAlert.conjunction_id
-      if (alertId !== lastHandledAlertId.current) {
-        lastHandledAlertId.current = alertId
-        if (latestAlert.risk_level === 'HIGH') {
-          setActiveNav('alerts')
-          setActiveAlert(latestAlert)
-        }
-      }
-    }
-  }, [latestAlert, autoSwitchOnHighRisk, activeView])
-
   // Memoize the context value to prevent unnecessary re-renders in consumers
   const value = useMemo(
     () => ({
@@ -135,10 +120,6 @@ export function AppProvider({ children }) {
       activeAlert,
       setActiveAlert,
 
-      // Settings
-      autoSwitchOnHighRisk,
-      setAutoSwitchOnHighRisk,
-
       // Filters
       filters,
       setFilters,
@@ -156,7 +137,6 @@ export function AppProvider({ children }) {
       selectedSatellite,
       showDebrisOnly,
       activeAlert,
-      autoSwitchOnHighRisk,
       filters,
       filteredSatellites,
     ]

@@ -107,7 +107,7 @@ export function FilterBar({ filters, onChange }) {
         })}
       </div>
 
-      <div style={{ width: '1px', height: '24px', background: 'var(--space-border, #1a1a2e)', alignSelf: 'center' }} />
+      <div className="hide-mobile" style={{ width: '1px', height: '24px', background: 'var(--space-border, #1a1a2e)', alignSelf: 'center' }} />
 
       {/* Altitude Range Inputs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>

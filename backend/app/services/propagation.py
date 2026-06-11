@@ -21,6 +21,7 @@ class PropagationResult(TypedDict):
     orbital_period_min: float
     timestamp: datetime
     geocentric_km: tuple[float, float, float]
+    velocity_vector_kms: tuple[float, float, float]
 
 
 def ensure_utc(timestamp: datetime | None = None) -> datetime:
@@ -60,6 +61,7 @@ def propagate_satellite(
             "orbital_period_min": orbital_period,
             "timestamp": moment,
             "geocentric_km": (float(position[0]), float(position[1]), float(position[2])),
+            "velocity_vector_kms": (float(velocity[0]), float(velocity[1]), float(velocity[2])),
         }
     except Exception:
         logger.exception("Failed to propagate satellite %s", satellite.norad_id)

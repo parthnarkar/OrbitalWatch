@@ -46,8 +46,8 @@ async def subscribe_satellites(sid: str, data: dict | None = None) -> None:
         await sio.emit("satellite_positions", last_broadcast_positions, to=sid)
 
 
-async def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
-    position = await asyncio.to_thread(propagate_satellite, satellite)
+def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
+    position = propagate_satellite(satellite)
     if position is None:
         return None
     return {
@@ -73,38 +73,49 @@ async def broadcast_positions() -> None:
             async with AsyncSessionLocal() as session:
                 result = await session.execute(select(SatelliteModel).limit(500))
                 satellites = list(result.scalars().all())
-            payloads = await asyncio.gather(*[_position_payload(satellite) for satellite in satellites])
-            data = [payload for payload in payloads if payload is not None]
+            
+            data = []
+            for satellite in satellites:
+                payload = _position_payload(satellite)
+                if payload is not None:
+                    data.append(payload)
+            
             last_broadcast_positions = data
             if manager.get_active_connections():
                 await sio.emit("satellite_positions", data)
         except asyncio.CancelledError:
-            raise
+            logger.info("Position broadcast task cancelled")
+            break
         except Exception:
             logger.exception("Position broadcast failed")
         await asyncio.sleep(60)
 
 
-
 async def listen_for_alerts(redis: Redis | None) -> None:
-    while True:
+    try:
         if redis is None:
-            await asyncio.sleep(10)
-            continue
-        try:
-            pubsub = redis.pubsub()
-            await pubsub.subscribe("new_alerts")
-            async for message in pubsub.listen():
-                if message.get("type") != "message":
-                    continue
-                raw = message.get("data")
-                data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
-                if isinstance(data, dict) and "data" in data:
-                    await sio.emit("new_alert", data["data"])
-                else:
-                    await sio.emit("new_alert", data)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("Redis alert listener failed; retrying")
-            await asyncio.sleep(5)
+            while True:
+                await asyncio.sleep(10)
+            return
+
+        pubsub = redis.pubsub()
+        await pubsub.subscribe("new_alerts")
+        async for message in pubsub.listen():
+            if message.get("type") != "message":
+                continue
+            raw = message.get("data")
+            data = json.loads(raw.decode("utf-8") if isinstance(raw, bytes) else raw)
+            if isinstance(data, dict) and "data" in data:
+                await sio.emit("new_alert", data["data"])
+            else:
+                await sio.emit("new_alert", data)
+    except asyncio.CancelledError:
+        logger.info("Alert listener cancelled")
+    except Exception:
+        logger.exception("Redis alert listener failed")
+    finally:
+        if redis is not None:
+            try:
+                await pubsub.close()
+            except Exception:
+                pass
