@@ -1,76 +1,92 @@
-# Byte-compiled / optimized / DLL files
+# ==============================================================================
+# Python Bytecode & Cache Files
+# ==============================================================================
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+*.cover
+*.py,cover
+.hypothesis/
 
-# Distribution / packaging
+# ==============================================================================
+# Environments & Packages
+# ==============================================================================
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+.venv
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+bin/
+lib/
+lib64/
+include/
+share/
 build/
 develop-eggs/
 dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+# ==============================================================================
+# PyInstaller & Installer Logs
+# ==============================================================================
 *.manifest
 *.spec
-
-# Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-pytestdebug.log
-
-# Environments
-.env
-.env.local
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# FastAPI / Web Server
+# ==============================================================================
+# Database & Runtime Data
+# ==============================================================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
 *.log
+orbitalwatch.db
+orbitalwatch.db-journal
 
-# IDEs and Editors
+# ==============================================================================
+# IDEs, Editors & OS Files
+# ==============================================================================
 .idea/
 .vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 *.swp
 *.swo
 *~
 .DS_Store
-
-# Databases
-*.sqlite3
-*.sqlite
-*.db
-*.db-journal
+Thumbs.db
+desktop.ini
+.project
+.pydevproject
+.settings/
