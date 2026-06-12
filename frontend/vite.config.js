@@ -62,6 +62,10 @@ export default defineConfig(async () => {
       },
     },
 
+    worker: {
+      format: 'es',
+    },
+
     server: {
       port: 5173,
       proxy: {

@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import PropTypes from 'prop-types'
-import { Clapperboard, Menu, X } from 'lucide-react'
+import { Clapperboard, Menu, X, Rocket } from 'lucide-react'
 import { useAppContext } from '../../context/AppContext.jsx'
 import SearchBar from '../Dashboard/SearchBar.jsx'
 import OrbitalClock from '../Dashboard/OrbitalClock.jsx'
@@ -45,7 +45,7 @@ function Header({ connected, demoEnabled, onToggleDemo, activeNav, onNavChange, 
   const [hoveredNav, setHoveredNav] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  const { setSelectedSatellite } = useAppContext()
+  const { setSelectedSatellite, simOpen, setSimOpen, setActiveNav } = useAppContext()
 
   const handleSearchSelect = (sat) => {
     setSelectedSatellite(sat)
@@ -157,6 +157,47 @@ function Header({ connected, demoEnabled, onToggleDemo, activeNav, onNavChange, 
             </button>
           )
         })}
+        
+        {/* Desktop Launch Simulator Button */}
+        <button
+          id="nav-launch-simulator"
+          className="hide-mobile"
+          onClick={() => {
+            setActiveNav('dashboard')
+            setSimOpen(!simOpen)
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+            padding: '0.375rem 0.75rem',
+            borderRadius: '8px',
+            fontSize: '0.8125rem',
+            fontWeight: simOpen ? 600 : 400,
+            color: simOpen ? '#00d4ff' : '#8888aa',
+            background: simOpen ? 'rgba(0,212,255,0.12)' : 'transparent',
+            border: simOpen ? '1px solid rgba(0,212,255,0.2)' : '1px solid transparent',
+            transition: 'all 150ms ease',
+            cursor: 'pointer',
+            position: 'relative',
+          }}
+          onMouseEnter={(e) => {
+            if (!simOpen) {
+              e.currentTarget.style.color = '#e8e8f0'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!simOpen) {
+              e.currentTarget.style.color = '#8888aa'
+              e.currentTarget.style.background = 'transparent'
+            }
+          }}
+        >
+          <Rocket size={14} />
+          Launch Simulator
+        </button>
+
         {activeNav === 'dashboard' && (
           <div style={{ marginLeft: '0.5rem', flex: '1 1 auto', maxWidth: '280px', minWidth: '80px' }}>
             <SearchBar onSelect={handleSearchSelect} />
@@ -349,6 +390,34 @@ function Header({ connected, demoEnabled, onToggleDemo, activeNav, onNavChange, 
                 </button>
               )
             })}
+
+            {/* Mobile Launch Simulator Button */}
+            <button
+              onClick={() => {
+                setActiveNav('dashboard')
+                setSimOpen(!simOpen)
+                setMenuOpen(false)
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                fontSize: '0.9rem',
+                fontWeight: simOpen ? 600 : 400,
+                color: simOpen ? '#00d4ff' : '#e8e8f0',
+                background: simOpen ? 'rgba(0,212,255,0.1)' : 'rgba(255,255,255,0.02)',
+                border: simOpen ? '1px solid rgba(0,212,255,0.2)' : '1px solid rgba(255,255,255,0.05)',
+                cursor: 'pointer',
+                transition: 'all 150ms ease',
+                textAlign: 'left',
+                width: '100%',
+              }}
+            >
+              <Rocket size={16} />
+              <span style={{ flex: 1 }}>Launch Simulator</span>
+            </button>
           </div>
 
           <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)' }} />

@@ -50,11 +50,27 @@ export function AppProvider({ children }) {
     clearPendingAlerts,
   } = useWebSocket(activeView === 'globe')
 
-  // UI States
   const [selectedSatellite, setSelectedSatellite] = useState(null)
   const [showDebrisOnly, setShowDebrisOnly] = useState(false)
   const [activeAlert, setActiveAlert] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
+
+  // Simulation States
+  const [simOpen, setSimOpen] = useState(false)
+  const [simParams, setSimParams] = useState({
+    name: 'Phoenix-1',
+    launchSite: 'Cape Canaveral',
+    altitudeKm: 500,
+    inclination: 28.5383,
+    eccentricity: 0.0001,
+    raan: '',
+    payloadMass: 500,
+    durationYears: 5,
+    deorbitStrategy: 'Active'
+  })
+  const [simActive, setSimActive] = useState(false)
+  const [simResult, setSimResult] = useState(null)
+  const [simLaunched, setSimLaunched] = useState(false)
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -124,6 +140,18 @@ export function AppProvider({ children }) {
       filters,
       setFilters,
       filteredSatellites,
+
+      // Launch Simulator States
+      simOpen,
+      setSimOpen,
+      simParams,
+      setSimParams,
+      simActive,
+      setSimActive,
+      simResult,
+      setSimResult,
+      simLaunched,
+      setSimLaunched,
     }),
     [
       activeNav,
@@ -139,6 +167,11 @@ export function AppProvider({ children }) {
       activeAlert,
       filters,
       filteredSatellites,
+      simOpen,
+      simParams,
+      simActive,
+      simResult,
+      simLaunched,
     ]
   )
 

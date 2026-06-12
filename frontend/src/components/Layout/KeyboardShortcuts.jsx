@@ -54,6 +54,7 @@ export const SHORTCUTS = [
   { key: 'a',      description: 'Switch to Alerts view' },
   { key: 'f',      description: 'Follow selected satellite' },
   { key: 'd',      description: 'Toggle Demo Mode' },
+  { key: 'l',      description: 'Toggle Launch Simulator' },
   { key: 'Escape', description: 'Close panel / modal' },
   { key: '?',      description: 'Show this cheat sheet' },
 ]
@@ -69,7 +70,7 @@ export const SHORTCUTS = [
  * }} options
  */
 export function useKeyboardShortcuts({ onToggleDemoMode, onOpenShortcuts }) {
-  const { setActiveNav, setActiveAlert, selectedSatellite } = useAppContext()
+  const { setActiveNav, setActiveAlert, selectedSatellite, simOpen, setSimOpen } = useAppContext()
 
   const handler = useCallback(
     (e) => {
@@ -113,7 +114,15 @@ export function useKeyboardShortcuts({ onToggleDemoMode, onOpenShortcuts }) {
 
         case 'Escape':
           setActiveAlert(null)
+          setSimOpen(false)
           window.dispatchEvent(new CustomEvent('ow:close-all'))
+          break
+
+        case 'l':
+        case 'L':
+          e.preventDefault()
+          setActiveNav('dashboard')
+          setSimOpen((prev) => !prev)
           break
 
         case '?':
@@ -125,7 +134,7 @@ export function useKeyboardShortcuts({ onToggleDemoMode, onOpenShortcuts }) {
           break
       }
     },
-    [setActiveNav, setActiveAlert, selectedSatellite, onToggleDemoMode, onOpenShortcuts]
+    [setActiveNav, setActiveAlert, selectedSatellite, onToggleDemoMode, onOpenShortcuts, simOpen, setSimOpen]
   )
 
   useEffect(() => {

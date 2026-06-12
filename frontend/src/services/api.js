@@ -16,6 +16,16 @@ const api = axios.create({
   },
 })
 
+// Separate instance with longer timeout for rescan operations
+const apiSlow = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+  timeout: 90_000,
+  headers: {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  },
+})
+
 // ── Request Interceptor ───────────────────────────────────────────────────────
 
 api.interceptors.request.use(
@@ -116,6 +126,38 @@ export async function fetchConjunctions(risk_level) {
  */
 export async function fetchStats() {
   const response = await api.get('/stats')
+  return response.data
+}
+
+/**
+ * Ping CelesTrak to check connectivity before a full rescan.
+ *
+ * @returns {Promise<{ reachable: boolean, latency_ms: number, message: string }>}
+ */
+export async function pingCelesTrak() {
+  const response = await api.get('/rescan/ping')
+  return response.data
+}
+
+/**
+ * Trigger a fresh CelesTrak data fetch and catalog update.
+ * Uses a longer timeout (90s) because fetching 500 TLEs can take time.
+ *
+ * @returns {Promise<{
+ *   success: boolean,
+ *   fetched: number,
+ *   valid: number,
+ *   rejected: number,
+ *   updated: number,
+ *   inserted: number,
+ *   total_in_catalog: number,
+ *   cooldown_remaining: number,
+ *   timestamp: string,
+ *   message: string,
+ * }>}
+ */
+export async function triggerRescan() {
+  const response = await apiSlow.post('/rescan')
   return response.data
 }
 

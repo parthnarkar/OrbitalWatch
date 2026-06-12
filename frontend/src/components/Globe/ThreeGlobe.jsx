@@ -14,7 +14,7 @@
 
 import { Suspense, useRef, useMemo, useCallback, useState, useEffect } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls, Stars, Line } from '@react-three/drei'
+import { OrbitControls, Stars, Line, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import PropTypes from 'prop-types'
 
@@ -50,16 +50,60 @@ const DEFAULT_COLOR = '#888888'
  * @param {number} altitudeKm  Altitude above the surface in kilometres
  * @returns {[number, number, number]} [x, y, z]
  */
+const KM_TO_UNIT = 6.5 / 6378.137
+
 function geoToCartesian(lat, lon, altitudeKm) {
   const latRad = (lat * Math.PI) / 180
   const lonRad = (lon * Math.PI) / 180
-  const h = altitudeKm * 0.001 // scale km → scene units
+  const h = altitudeKm * KM_TO_UNIT // scale km → scene units
 
   const x = (R + h) * Math.cos(latRad) * Math.cos(lonRad)
   const z = (R + h) * Math.cos(latRad) * Math.sin(lonRad)
   const y = (R + h) * Math.sin(latRad)
 
   return [x, y, z]
+}
+
+const LAUNCH_SITE_COORDS = {
+  'Cape Canaveral': { lat: 28.5383, lon: -80.6489 },
+  'Baikonur': { lat: 45.9650, lon: 63.3050 },
+  'Kourou': { lat: 5.1597, lon: -52.6502 },
+  'Vandenberg': { lat: 34.7420, lon: -120.5724 }
+}
+
+function eciToThree(pos) {
+  return new THREE.Vector3(pos.x * KM_TO_UNIT, pos.z * KM_TO_UNIT, pos.y * KM_TO_UNIT)
+}
+
+function getOrbitPoints(altitudeKm, inclinationDeg, eccentricity, raanDeg, argPerigeeDeg = 0, numPoints = 180) {
+  const a = R + altitudeKm * KM_TO_UNIT // Semi-major axis in scene units
+  const e = eccentricity
+  const inc = (inclinationDeg * Math.PI) / 180
+  const raan = (raanDeg * Math.PI) / 180
+  const argP = (argPerigeeDeg * Math.PI) / 180
+
+  const points = []
+  for (let i = 0; i <= numPoints; i++) {
+    const nu = (i * 2 * Math.PI) / numPoints // True anomaly
+    const r_orb = (a * (1 - e * e)) / (1 + e * Math.cos(nu))
+
+    const x_p = r_orb * Math.cos(nu)
+    const y_p = r_orb * Math.sin(nu)
+
+    const cosRaan = Math.cos(raan)
+    const sinRaan = Math.sin(raan)
+    const cosArgP = Math.cos(argP)
+    const sinArgP = Math.sin(argP)
+    const cosInc = Math.cos(inc)
+    const sinInc = Math.sin(inc)
+
+    const x_eci = x_p * (cosRaan * cosArgP - sinRaan * sinArgP * cosInc) - y_p * (cosRaan * sinArgP + sinRaan * cosArgP * cosInc)
+    const y_eci = x_p * (sinRaan * cosArgP + cosRaan * sinArgP * cosInc) - y_p * (sinRaan * sinArgP - cosRaan * cosArgP * cosInc)
+    const z_eci = x_p * (sinArgP * sinInc) + y_p * (cosArgP * sinInc)
+
+    points.push(new THREE.Vector3(x_eci, z_eci, y_eci))
+  }
+  return points;
 }
 
 // ── Procedural Fallbacks ──────────────────────────────────────────────────────
@@ -141,7 +185,7 @@ const AtmosphereShader = {
 // ── Earth mesh ────────────────────────────────────────────────────────────────
 
 /** Renders a high-quality NASA-style Earth sphere and glow halo. */
-function EarthMesh() {
+function EarthMesh({ paused }) {
   const earthRef = useRef(/** @type {THREE.Mesh|null} */ (null))
 
   const [earthTexture, setEarthTexture] = useState(/** @type {THREE.Texture|null} */ (null))
@@ -171,9 +215,9 @@ function EarthMesh() {
     )
   }, [])
 
-  // Rotate Earth slowly
+  // Rotate Earth slowly, but pause during active launch simulation or design phase
   useFrame((_, delta) => {
-    if (earthRef.current) {
+    if (earthRef.current && !paused) {
       earthRef.current.rotation.y += delta * 0.015
     }
   })
@@ -311,17 +355,6 @@ function SatelliteDots({ satellites, positions, selectedNoradId, onSelect, onHov
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true
     }
-
-    // Add a console.log to verify colors are being set (first 5 satellite types and colors)
-    const logData = visible.slice(0, 5).map((sat) => {
-      const typeKey = (sat.object_type || sat.type || 'unknown').toLowerCase()
-      let colorStr = '#888888'
-      if (typeKey === 'payload') colorStr = '#00ff9d'
-      else if (typeKey === 'debris') colorStr = '#ff4d4d'
-      else if (typeKey === 'rocket body') colorStr = '#ff9d00'
-      return { type: typeKey, color: colorStr }
-    })
-    console.log('Satellite colors (first 5):', logData)
   }, [visible, selectedNoradId, dummy, satellites])
 
   // Pulse the selected satellite instance's scale in the frame loop
@@ -544,6 +577,253 @@ HoverTooltip.propTypes = {
   hoveredSat: PropTypes.object,
 }
 
+function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
+  if (simLaunched) return null
+
+  const points = useMemo(() => {
+    if (simulationResult && simulationResult.proposedOrbitPoints) {
+      return simulationResult.proposedOrbitPoints.map((p) => eciToThree(p))
+    }
+    if (!proposedOrbit) return []
+    const { altitudeKm, inclination, eccentricity, raan } = proposedOrbit
+    const solvedRaan = raan === '' || raan === null ? 0.0 : Number(raan)
+    return getOrbitPoints(Number(altitudeKm), Number(inclination), Number(eccentricity), solvedRaan)
+  }, [proposedOrbit, simulationResult])
+
+  const color = useMemo(() => {
+    if (!simulationResult) return '#ffffff'
+    const status = simulationResult.status
+    if (status === 'APPROVED') return '#00ff9d'
+    if (status === 'REJECTED') return '#ff4466'
+    if (status === 'WARNING') return '#ffbb33'
+    return '#ffffff'
+  }, [simulationResult])
+
+  if (points.length === 0) return null
+
+  return (
+    <Line
+      points={points}
+      color={color}
+      lineWidth={1.6}
+      opacity={0.6}
+      transparent
+    />
+  )
+}
+
+function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) {
+  if (!simLaunched) return null
+  const [time, setTime] = useState(0)
+
+  useEffect(() => {
+    setTime(0)
+  }, [simulationResult, proposedOrbit])
+
+  useFrame((_, delta) => {
+    setTime((t) => t + delta)
+  })
+
+  const { points, ascentPoints, p1, p2, color, isRejected } = useMemo(() => {
+    if (!proposedOrbit || !simulationResult) return {}
+    const { altitudeKm, inclination, eccentricity, raan, launchSite } = proposedOrbit
+    const solvedRaan = raan === '' || raan === null ? 0.0 : Number(raan)
+    const pts = simulationResult.proposedOrbitPoints
+      ? simulationResult.proposedOrbitPoints.map((p) => eciToThree(p))
+      : getOrbitPoints(Number(altitudeKm), Number(inclination), Number(eccentricity), solvedRaan)
+
+    const site = LAUNCH_SITE_COORDS[launchSite] || LAUNCH_SITE_COORDS['Cape Canaveral']
+    const startPos = new THREE.Vector3(...geoToCartesian(site.lat, site.lon, 0))
+    const endPos = pts[0]
+    const midPoint = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5)
+    const controlPoint = midPoint.clone().normalize().multiplyScalar(6.5 + altitudeKm * 0.0005)
+    
+    const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos)
+    const ascPts = curve.getPoints(40)
+
+    const isRej = simulationResult.status === 'REJECTED'
+    const clr = simulationResult.status === 'APPROVED' ? '#00ff9d' : isRej ? '#ff4466' : '#ffbb33'
+
+    let pt1 = null
+    let pt2 = null
+    if (simulationResult.proposedPos && simulationResult.conflictPos) {
+      pt1 = eciToThree(simulationResult.proposedPos)
+      pt2 = eciToThree(simulationResult.conflictPos)
+    }
+
+    return { points: pts, ascentPoints: ascPts, p1: pt1, p2: pt2, color: clr, isRejected: isRej }
+  }, [proposedOrbit, simulationResult])
+
+  if (!points || points.length === 0) return null
+
+  const isAscent = time < 3.0
+  
+  let currentPos = new THREE.Vector3()
+  if (isAscent) {
+    const t = time / 3.0
+    const index = Math.min(Math.floor(t * ascentPoints.length), ascentPoints.length - 1)
+    if (ascentPoints[index]) currentPos.copy(ascentPoints[index])
+  } else {
+    const elapsed = time - 3.0
+    const idx = Math.floor(elapsed * 25) % points.length
+    if (points[idx]) currentPos.copy(points[idx])
+  }
+
+  return (
+    <group>
+      {isAscent && (
+        <Line
+          points={ascentPoints}
+          color="#ffaa00"
+          lineWidth={2.0}
+          opacity={0.8}
+          transparent
+        />
+      )}
+
+      {!isAscent && (
+        <group>
+          <Line
+            points={points}
+            color={color}
+            lineWidth={1.8}
+            opacity={0.7}
+            transparent
+          />
+          <Line
+            points={points}
+            color={color}
+            lineWidth={4.0}
+            opacity={0.15}
+            transparent
+          />
+        </group>
+      )}
+
+      <mesh position={currentPos}>
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshBasicMaterial color={isAscent ? '#ffff88' : color} />
+      </mesh>
+      
+      <mesh position={currentPos}>
+        <sphereGeometry args={[0.2, 8, 8]} />
+        <meshBasicMaterial color={isAscent ? '#ffaa00' : color} transparent opacity={0.25} wireframe />
+      </mesh>
+
+    </group>
+  )
+}
+
+function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }) {
+  const [time, setTime] = useState(0)
+
+  useEffect(() => {
+    setTime(0)
+  }, [simLaunched])
+
+  useFrame((_, delta) => {
+    if (simLaunched) {
+      setTime((t) => t + delta)
+    }
+  })
+
+  const { p1, p2, color } = useMemo(() => {
+    if (!proposedOrbit || !simulationResult) return {}
+    const pt1 = simulationResult.proposedPos ? eciToThree(simulationResult.proposedPos) : null
+    const pt2 = simulationResult.conflictPos ? eciToThree(simulationResult.conflictPos) : null
+    const isRej = simulationResult.status === 'REJECTED'
+    const isWarn = simulationResult.status === 'WARNING'
+    const clr = isRej ? '#ff4466' : isWarn ? '#ffbb33' : '#00ffff'
+    return { p1: pt1, p2: pt2, color: clr }
+  }, [proposedOrbit, simulationResult])
+
+  if (!p1 || !p2) return null
+
+  // If launched, hide the highlight during the 3-second ascent phase
+  if (simLaunched && time < 3.0) return null
+
+  return (
+    <group>
+      {/* Line between proposed satellite and conflicting object */}
+      <Line
+        points={[p1, p2]}
+        color={color}
+        lineWidth={2.5}
+        opacity={0.9}
+        transparent
+      />
+
+      {/* Pulsing marker at proposed satellite position */}
+      <mesh position={p1}>
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      <mesh position={p1}>
+        <sphereGeometry args={[0.2, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={0.3} wireframe />
+      </mesh>
+
+      {/* Pulsing marker at conflicting object position */}
+      <mesh position={p2}>
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshBasicMaterial color="#ff4466" />
+      </mesh>
+      <mesh position={p2}>
+        <sphereGeometry args={[0.2, 16, 16]} />
+        <meshBasicMaterial color="#ff4466" transparent opacity={0.3} wireframe />
+      </mesh>
+      <mesh position={p2}>
+        <ringGeometry args={[0.22, 0.32, 32]} />
+        <meshBasicMaterial color="#ff4466" side={THREE.DoubleSide} transparent opacity={0.7} />
+      </mesh>
+
+      {/* Label at proposed satellite position */}
+      <Html position={p1} distanceFactor={15}>
+        <div
+          style={{
+            background: 'rgba(0, 212, 255, 0.92)',
+            color: '#000000',
+            padding: '3px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            fontFamily: 'sans-serif',
+            whiteSpace: 'nowrap',
+            border: '1px solid rgba(255, 255, 255, 0.4)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            transform: 'translate(-50%, -140%)',
+            pointerEvents: 'none',
+          }}
+        >
+          🛰️ Proposed Orbit
+        </div>
+      </Html>
+
+      {/* Label at conflicting object position */}
+      <Html position={p2} distanceFactor={15}>
+        <div
+          style={{
+            background: 'rgba(255, 68, 102, 0.92)',
+            color: '#ffffff',
+            padding: '3px 6px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: 'bold',
+            fontFamily: 'sans-serif',
+            whiteSpace: 'nowrap',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+            transform: 'translate(-50%, -140%)',
+            pointerEvents: 'none',
+          }}
+        >
+          ⚠️ {simulationResult.conflictingObject?.name || 'Conflict Object'}
+        </div>
+      </Html>
+    </group>
+  )
+}
+
 // ── Inner scene (runs inside Canvas context) ──────────────────────────────────
 
 /**
@@ -554,35 +834,56 @@ HoverTooltip.propTypes = {
  * @param {Function}    props.onSelect
  * @param {Object}      props.controlsRef
  */
-function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controlsRef }) {
+function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controlsRef, proposedOrbit, simulationResult, simLaunched }) {
   const [hoveredSat, setHoveredSat] = useState(/** @type {Object|null} */ (null))
   const [followActive, setFollowActive] = useState(false)
   const [autoRotateSpeed, setAutoRotateSpeed] = useState(0.5)
+  const [conflictFocusPoint, setConflictFocusPoint] = useState(null)
 
   // Listen to camera follow and demo events
   useEffect(() => {
     const handleFollow = () => {
       setFollowActive((prev) => !prev)
+      setConflictFocusPoint(null)
     }
     const handleDemoSelect = () => {
       // Auto-focus and follow in demo mode
       setFollowActive(true)
+      setConflictFocusPoint(null)
     }
     const handleAutoRotate = (e) => {
       const { enabled, speed } = e.detail ?? {}
       setAutoRotateSpeed(enabled ? speed : 0.5)
     }
+    const handleZoomToConflict = (e) => {
+      const { position } = e.detail ?? {}
+      if (position) {
+        setFollowActive(false)
+        setConflictFocusPoint(new THREE.Vector3(...position))
+      }
+    }
+    const handleResetCamera = () => {
+      setFollowActive(false)
+      setConflictFocusPoint(null)
+      if (controlsRef.current) {
+        controlsRef.current.reset()
+      }
+    }
 
     window.addEventListener('ow:follow-satellite', handleFollow)
     window.addEventListener('ow:demo-select-satellite', handleDemoSelect)
     window.addEventListener('ow:demo-auto-rotate', handleAutoRotate)
+    window.addEventListener('ow:zoom-to-conflict', handleZoomToConflict)
+    window.addEventListener('ow:reset-camera', handleResetCamera)
 
     return () => {
       window.removeEventListener('ow:follow-satellite', handleFollow)
       window.removeEventListener('ow:demo-select-satellite', handleDemoSelect)
       window.removeEventListener('ow:demo-auto-rotate', handleAutoRotate)
+      window.removeEventListener('ow:zoom-to-conflict', handleZoomToConflict)
+      window.removeEventListener('ow:reset-camera', handleResetCamera)
     }
-  }, [])
+  }, [controlsRef])
 
   // Auto-disable follow if selection is cleared
   useEffect(() => {
@@ -607,12 +908,21 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
   }, [selectedSatPos])
 
   // Camera follow / target centering in useFrame
-  useFrame(() => {
+  useFrame(({ camera }) => {
     if (followActive && selectedSatCartesian && controlsRef.current) {
       const [x, y, z] = selectedSatCartesian
       const targetVec = new THREE.Vector3(x, y, z)
       // Smoothly interpolate the controls target to the satellite position
       controlsRef.current.target.lerp(targetVec, 0.1)
+      controlsRef.current.update()
+    } else if (conflictFocusPoint && controlsRef.current) {
+      controlsRef.current.target.lerp(conflictFocusPoint, 0.1)
+      // Zoom close to conflict coordinate
+      const cameraTargetDist = camera.position.distanceTo(conflictFocusPoint)
+      if (cameraTargetDist > 3.0) {
+        const dir = camera.position.clone().sub(conflictFocusPoint).normalize()
+        camera.position.lerp(conflictFocusPoint.clone().add(dir.multiplyScalar(2.5)), 0.08)
+      }
       controlsRef.current.update()
     } else if (controlsRef.current) {
       // Lerp controls target back to Earth's center
@@ -639,7 +949,7 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
       <Stars radius={300} depth={150} count={15000} factor={6} saturation={0.8} fade speed={1.5} />
 
       {/* ── Earth sphere, atmosphere glow halo ──────────────── */}
-      <EarthMesh />
+      <EarthMesh paused={proposedOrbit !== null || simLaunched} />
 
       {/* ── Satellite dots ────────────────────────────────────────────────── */}
       <SatelliteDots
@@ -652,6 +962,15 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
 
       {/* ── Orbital trail for selected satellite ──────────────────────────── */}
       {selectedSatPos && <OrbitalTrail satellite={selectedSatPos} />}
+      
+      {/* ── Proposed Orbit Ghost Ring ────────────────────────────────────── */}
+      <ProposedOrbitRing proposedOrbit={proposedOrbit} simulationResult={simulationResult} simLaunched={simLaunched} />
+
+      {/* ── Simulation Trajectory & Conjunction Highlighter ───────────────── */}
+      <SimulationTrajectory proposedOrbit={proposedOrbit} simulationResult={simulationResult} simLaunched={simLaunched} />
+
+      {/* ── Conjunction Highlighter (pulsing markers & labels at TCA) ── */}
+      <ConjunctionHighlighter proposedOrbit={proposedOrbit} simulationResult={simulationResult} simLaunched={simLaunched} />
 
       {/* ── Pulsing glowing ring for selected satellite ───────────────────── */}
       {selectedSatCartesian && <SelectedSatelliteRing position={selectedSatCartesian} />}
@@ -665,7 +984,7 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
         enablePan={false}
         minDistance={9}
         maxDistance={35}
-        autoRotate={!followActive}
+        autoRotate={!followActive && !simLaunched && !proposedOrbit}
         autoRotateSpeed={autoRotateSpeed}
         target={[0, 0, 0]}
         makeDefault
@@ -695,7 +1014,7 @@ GlobeScene.propTypes = {
  * @param {Object}      [props.controlsRef]   External ref forwarded to OrbitControls
  * @returns {JSX.Element}
  */
-function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controlsRef }) {
+function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controlsRef, proposedOrbit, simulationResult, simLaunched }) {
   const internalRef = useRef(null)
   const resolvedRef = controlsRef ?? internalRef
 
@@ -713,6 +1032,9 @@ function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controls
           selectedNoradId={selectedNoradId}
           onSelect={onSelect}
           controlsRef={resolvedRef}
+          proposedOrbit={proposedOrbit}
+          simulationResult={simulationResult}
+          simLaunched={simLaunched}
         />
       </Suspense>
     </Canvas>
@@ -725,11 +1047,17 @@ ThreeGlobe.propTypes = {
   selectedNoradId: PropTypes.string,
   onSelect: PropTypes.func.isRequired,
   controlsRef: PropTypes.object,
+  proposedOrbit: PropTypes.object,
+  simulationResult: PropTypes.object,
+  simLaunched: PropTypes.bool,
 }
 
 ThreeGlobe.defaultProps = {
   selectedNoradId: null,
   controlsRef: null,
+  proposedOrbit: null,
+  simulationResult: null,
+  simLaunched: false,
 }
 
 export default ThreeGlobe

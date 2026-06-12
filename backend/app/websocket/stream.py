@@ -25,6 +25,9 @@ sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
 
 last_broadcast_positions: list[dict[str, object]] = []
 
+# Set to True by rescan endpoint so next loop iteration broadcasts immediately
+_broadcast_now = asyncio.Event()
+
 
 @sio.on("connect")
 async def connect(sid: str, environ: dict) -> None:
@@ -67,19 +70,26 @@ def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
 
 
 async def broadcast_positions() -> None:
+    """Broadcast propagated satellite positions every 5 seconds.
+    
+    Wakes up immediately when trigger_immediate_broadcast() is called,
+    so a rescan is reflected on the globe within ~1 second.
+    """
     global last_broadcast_positions
     while True:
         try:
             async with AsyncSessionLocal() as session:
-                result = await session.execute(select(SatelliteModel).limit(500))
+                result = await session.execute(
+                    select(SatelliteModel).order_by(SatelliteModel.norad_id).limit(500)
+                )
                 satellites = list(result.scalars().all())
-            
+
             data = []
             for satellite in satellites:
                 payload = _position_payload(satellite)
                 if payload is not None:
                     data.append(payload)
-            
+
             last_broadcast_positions = data
             if manager.get_active_connections():
                 await sio.emit("satellite_positions", data)
@@ -88,7 +98,18 @@ async def broadcast_positions() -> None:
             break
         except Exception:
             logger.exception("Position broadcast failed")
-        await asyncio.sleep(60)
+
+        # Wait 5 s OR wake up early if rescan triggered an immediate broadcast
+        _broadcast_now.clear()
+        try:
+            await asyncio.wait_for(_broadcast_now.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass
+
+
+def trigger_immediate_broadcast() -> None:
+    """Call this after a rescan so the globe updates within ~1 second."""
+    _broadcast_now.set()
 
 
 async def listen_for_alerts(redis: Redis | None) -> None:

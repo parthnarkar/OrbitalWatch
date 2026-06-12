@@ -23,6 +23,8 @@ import { useKeyboardShortcuts, SHORTCUTS } from './components/Layout/KeyboardSho
 
 import useSatellites from './hooks/useSatellites.js'
 import { fetchStats, fetchConjunctions } from './services/api.js'
+import RescanButton from './components/Dashboard/RescanButton.jsx'
+import LaunchSimulatorPanel from './components/Dashboard/LaunchSimulatorPanel.jsx'
 import './index.css'
 
 // ── Satellite type color map ──────────────────────────────────────────────────
@@ -354,7 +356,7 @@ FloatingFilterPanel.defaultProps = { stats: null }
 
 // ── Top-Right Camera Controls ─────────────────────────────────────────────────
 
-function CameraControls({ onReset }) {
+function CameraControls({ onReset, onRescan }) {
   return (
     <div
       style={{
@@ -404,26 +406,36 @@ function CameraControls({ onReset }) {
           Reset
         </span>
       </button>
+
+      {/* Rescan button — fetch fresh TLE data from CelesTrak */}
+      <RescanButton onRescanComplete={onRescan} />
     </div>
   )
 }
 
 CameraControls.propTypes = {
   onReset:  PropTypes.func.isRequired,
+  onRescan: PropTypes.func,
 }
+
+CameraControls.defaultProps = { onRescan: null }
 
 // ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
  * Full-screen globe view with floating panels.
  */
-function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
+function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
   const {
     filteredSatellites,
     filters,
     setFilters,
     selectedSatellite,
     setSelectedSatellite,
+    simOpen,
+    simParams,
+    simResult,
+    simLaunched,
   } = useAppContext()
 
   const [selectedNoradId, setSelectedNoradId] = useState(null)
@@ -523,12 +535,16 @@ function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
               selectedNoradId={selectedNoradId}
               onSelect={handleSelect}
               controlsRef={controlsRef}
+              proposedOrbit={simOpen ? simParams : null}
+              simulationResult={simResult}
+              simLaunched={simLaunched}
             />
           </ErrorBoundary>
 
           {/* Top-right camera controls */}
           <CameraControls
             onReset={onResetAll}
+            onRescan={onRescan}
           />
         </div>
 
@@ -541,7 +557,7 @@ function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
             top: 24,
             bottom: 24,
             width: 280,
-            display: 'flex',
+            display: simOpen ? 'none' : 'flex',
             flexDirection: 'column',
             gap: '12px',
             zIndex: 40,
@@ -571,6 +587,9 @@ function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
             />
           )}
         </div>
+
+        {/* Launch Simulator Panel */}
+        <LaunchSimulatorPanel satellites={satellites} />
 
         {/* Charts — bottom-right, only shown when satellite selected */}
         {selectedNoradId && (
@@ -630,10 +649,13 @@ function GlobeView({ onResetAll, controlsRef, stats, satellites }) {
 
 GlobeView.propTypes = {
   onResetAll:    PropTypes.func.isRequired,
+  onRescan:      PropTypes.func,
   controlsRef:   PropTypes.object.isRequired,
   stats:         PropTypes.object,
   satellites:    PropTypes.array.isRequired,
 }
+
+GlobeView.defaultProps = { onRescan: null }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
 
@@ -682,6 +704,9 @@ function AppInner() {
     setFilters,
     setShowDebrisOnly,
     alerts: liveAlerts,
+    connected,
+    setSimOpen,
+    setSimParams,
   } = useAppContext()
 
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
@@ -700,6 +725,7 @@ function AppInner() {
   const handleResetAll = useCallback(() => {
     // 1. Reset Camera
     controlsRef.current?.reset()
+    window.dispatchEvent(new CustomEvent('ow:reset-camera'))
 
     // 2. Clear selections
     setSelectedSatellite(null)
@@ -723,6 +749,53 @@ function AppInner() {
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [setSelectedSatellite, setActiveAlert, setFilters, setShowDebrisOnly, refetchSatellites])
 
+  /**
+   * Called by RescanButton after a successful CelesTrak fetch.
+   * Re-fetches the satellite catalogue and stats so the globe/counts update.
+   */
+  const handleRescanComplete = useCallback(() => {
+    refetchSatellites()
+    fetchStats()
+      .then(setStats)
+      .catch((e) => console.error('[App] post-rescan fetchStats error:', e))
+  }, [refetchSatellites])
+
+  // Parse URL configuration parameters on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const simParam = params.get('sim')
+    if (simParam) {
+      setActiveNav('dashboard')
+      setSimOpen(true)
+      if (simParam === 'phoenix-1') {
+        setSimParams({
+          name: 'Phoenix-1',
+          launchSite: 'Cape Canaveral',
+          altitudeKm: 600,
+          inclination: 53.0,
+          eccentricity: 0.0001,
+          raan: 120,
+          payloadMass: 650,
+          durationYears: 5,
+          deorbitStrategy: 'Active'
+        })
+      } else if (simParam === 'aurora-2') {
+        setSimParams({
+          name: 'Aurora-2',
+          launchSite: 'Vandenberg',
+          altitudeKm: 800,
+          inclination: 98.2,
+          eccentricity: 0.0002,
+          raan: 270,
+          payloadMass: 400,
+          durationYears: 8,
+          deorbitStrategy: 'Passive'
+        })
+      }
+    }
+  }, [setActiveNav, setSimOpen, setSimParams])
+
+  // Initial fetch on mount
   useEffect(() => {
     fetchStats()
       .then(setStats)
@@ -734,6 +807,19 @@ function AppInner() {
       .then((data) => setConjunctions(Array.isArray(data) ? data : []))
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
   }, [])
+
+  // Re-fetch and sync data once WebSocket connection is established
+  useEffect(() => {
+    if (connected) {
+      fetchStats()
+        .then(setStats)
+        .catch((e) => console.error('[App] sync fetchStats error:', e))
+      fetchConjunctions()
+        .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+        .catch((e) => console.error('[App] sync fetchConjunctions error:', e))
+      refetchSatellites()
+    }
+  }, [connected, refetchSatellites])
 
   // Merge live WebSocket alerts with static historical conjunctions
   const mergedConjunctions = useMemo(() => {
@@ -763,6 +849,7 @@ function AppInner() {
           return (
             <GlobeView
               onResetAll={handleResetAll}
+              onRescan={handleRescanComplete}
               controlsRef={controlsRef}
               stats={stats}
               satellites={satellites}
