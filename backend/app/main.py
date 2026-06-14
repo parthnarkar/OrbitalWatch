@@ -102,19 +102,32 @@ async def root() -> dict[str, str]:
     return {"message": "Welcome to the OrbitalWatch API"}
 
 
+@app.get("/ping")
+async def ping() -> dict[str, str]:
+    """Instant liveness check — no DB/Redis. Use this for uptime monitors."""
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health_check() -> dict[str, object]:
     db_ok = False
     redis_ok = False
     try:
-        async with AsyncSessionLocal() as session:
-            await session.execute(text("SELECT 1"))
-            db_ok = True
+        async def _check_db() -> None:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+        await asyncio.wait_for(_check_db(), timeout=5.0)
+        db_ok = True
+    except asyncio.TimeoutError:
+        logger.warning("Health DB check timed out")
     except Exception:
         logger.exception("Health DB check failed")
     try:
         if redis_client is not None:
-            redis_ok = bool(await redis_client.ping())
+            await asyncio.wait_for(redis_client.ping(), timeout=5.0)
+            redis_ok = True
+    except asyncio.TimeoutError:
+        logger.warning("Health Redis check timed out")
     except Exception:
         logger.exception("Health Redis check failed")
     return {
