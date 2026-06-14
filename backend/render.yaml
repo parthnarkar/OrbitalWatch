@@ -11,3 +11,7 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: CORS_ORIGINS
+        value: '["https://orbital-watch-bay.vercel.app","https://orbitalwatch-backend.onrender.com"]'
+      - key: WEB_CONCURRENCY
+        value: "1"
