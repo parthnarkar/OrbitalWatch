@@ -20,7 +20,13 @@ cors_origins = settings.CORS_ORIGINS
 if "*" in cors_origins:
     cors_origins = "*"
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins=cors_origins,
+    ping_timeout=60,     # keep WS alive longer on Render (default is 20s)
+    ping_interval=25,    # match Render's idle connection timeout
+    async_handlers=True,
+)
 
 
 last_broadcast_positions: list[dict[str, object]] = []

@@ -48,11 +48,10 @@ class WebSocketService {
     console.log(`[OrbitalWatch WS] Connecting to ${this.url} …`)
 
     this.socket = io(this.url, {
-      transports: ['polling', 'websocket'], // polling first: more reliable on cold-start
-      upgrade: true,                        // still upgrades to WS once connected
+      transports: ['websocket'],   // websocket-only: skip polling↔WS upgrade that breaks on Render
       reconnection: true,
       reconnectionAttempts: 20,
-      reconnectionDelay: 1000,
+      reconnectionDelay: 2000,
       reconnectionDelayMax: 10_000,
       timeout: 20_000,
     })
