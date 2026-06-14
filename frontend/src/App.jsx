@@ -22,7 +22,7 @@ import DemoMode, { useDemoMode } from './components/Dashboard/DemoMode.jsx'
 import { useKeyboardShortcuts, SHORTCUTS } from './components/Layout/KeyboardShortcuts.jsx'
 
 import useSatellites from './hooks/useSatellites.js'
-import { fetchStats, fetchConjunctions } from './services/api.js'
+import { fetchStats, fetchConjunctions, wakeUpBackend } from './services/api.js'
 import RescanButton from './components/Dashboard/RescanButton.jsx'
 import LaunchSimulatorPanel from './components/Dashboard/LaunchSimulatorPanel.jsx'
 import './index.css'
@@ -773,6 +773,8 @@ function AppInner() {
     setFocusedConjunction,
   } = useAppContext()
 
+  const [backendReady, setBackendReady] = useState(false)
+  const [wakeAttempt, setWakeAttempt]   = useState(0)
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
   const { satellites, refetch: refetchSatellites } = useSatellites()
 
@@ -860,17 +862,29 @@ function AppInner() {
     }
   }, [setActiveNav, setSimOpen, setSimParams])
 
-  // Initial fetch on mount
+  // ── Backend wake-up + initial data load ─────────────────────────────────
   useEffect(() => {
-    fetchStats()
-      .then(setStats)
-      .catch((e) => console.error('[App] fetchStats error:', e))
-  }, [])
-
-  useEffect(() => {
-    fetchConjunctions()
-      .then((data) => setConjunctions(Array.isArray(data) ? data : []))
-      .catch((e) => console.error('[App] fetchConjunctions error:', e))
+    let cancelled = false
+    async function boot() {
+      const ready = await wakeUpBackend({
+        maxAttempts: 20,
+        intervalMs: 4_000,
+        onAttempt: (n) => { if (!cancelled) setWakeAttempt(n) },
+      })
+      if (cancelled) return
+      setBackendReady(ready)
+      if (!ready) return
+      // Fire all initial fetches in parallel once backend is awake
+      Promise.all([
+        fetchStats().then(setStats).catch((e) => console.error('[App] fetchStats error:', e)),
+        fetchConjunctions()
+          .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+          .catch((e) => console.error('[App] fetchConjunctions error:', e)),
+      ])
+    }
+    boot()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Re-fetch and sync data once WebSocket connection is established
@@ -906,6 +920,41 @@ function AppInner() {
 
   return (
     <>
+      {/* ── Backend connecting overlay ─────────────────────────────────────── */}
+      {!backendReady && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: '#080810',
+            gap: '1.5rem',
+          }}
+        >
+          {/* Pulsing orbit ring */}
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%',
+            border: '2px solid transparent',
+            borderTopColor: '#00d4ff',
+            borderRightColor: 'rgba(0,212,255,0.3)',
+            animation: 'spin 1s linear infinite',
+          }} />
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ color: '#00d4ff', fontWeight: 700, fontSize: '1rem', margin: 0 }}>
+              Connecting to OrbitalWatch Backend
+            </p>
+            <p style={{ color: '#5a5a80', fontSize: '0.78rem', margin: '0.4rem 0 0' }}>
+              {wakeAttempt > 1
+                ? `Waking up server… attempt ${wakeAttempt} of 20`
+                : 'Establishing connection…'}
+            </p>
+          </div>
+          <p style={{ color: '#3a3a5a', fontSize: '0.68rem', margin: 0 }}>
+            Free-tier backends may take up to 60 seconds to wake up
+          </p>
+        </div>
+      )}
+
       <MainLayout demoEnabled={demoEnabled} onToggleDemo={toggleDemo}>
         {({ activeView }) => {
           if (activeView === 'alerts') {

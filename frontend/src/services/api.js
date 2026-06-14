@@ -16,6 +16,65 @@ const api = axios.create({
   },
 })
 
+// ── Backend Wake-up Utilities ─────────────────────────────────────────────────
+
+const WS_BASE = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
+
+/**
+ * Hits /ping — a zero-DB endpoint — to check if the backend is alive.
+ * Useful for waking up a Render free-tier instance before making real requests.
+ *
+ * @returns {Promise<boolean>}
+ */
+export async function pingBackend() {
+  try {
+    await axios.get(`${WS_BASE}/ping`, { timeout: 6_000 })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Polls /ping until the backend responds or the attempt limit is reached.
+ * Resolves to true when the backend is ready, false on timeout.
+ *
+ * @param {{ maxAttempts?: number, intervalMs?: number, onAttempt?: (n: number) => void }} [opts]
+ * @returns {Promise<boolean>}
+ */
+export async function wakeUpBackend({ maxAttempts = 15, intervalMs = 4_000, onAttempt } = {}) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (onAttempt) onAttempt(i + 1)
+    const ok = await pingBackend()
+    if (ok) return true
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  return false
+}
+
+/**
+ * Wraps any async fetch with simple retry + exponential backoff.
+ *
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @param {{ attempts?: number, baseDelayMs?: number }} [opts]
+ * @returns {Promise<T>}
+ */
+async function withRetry(fn, { attempts = 3, baseDelayMs = 1_500 } = {}) {
+  let lastErr
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, baseDelayMs * Math.pow(2, i)))
+      }
+    }
+  }
+  throw lastErr
+}
+
 // Separate instance with longer timeout for rescan operations
 const apiSlow = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
@@ -78,8 +137,7 @@ api.interceptors.response.use(
  * @returns {Promise<import('../types/satellite.js').Satellite[]>}
  */
 export async function fetchSatellites(params = {}) {
-  const response = await api.get('/satellites', { params })
-  return response.data
+  return withRetry(() => api.get('/satellites', { params }).then((r) => r.data))
 }
 
 /**
@@ -115,8 +173,7 @@ export async function searchSatellites(query) {
  */
 export async function fetchConjunctions(risk_level) {
   const params = risk_level ? { risk_level } : {}
-  const response = await api.get('/conjunctions', { params })
-  return response.data
+  return withRetry(() => api.get('/conjunctions', { params }).then((r) => r.data))
 }
 
 /**
@@ -125,8 +182,7 @@ export async function fetchConjunctions(risk_level) {
  * @returns {Promise<import('../types/satellite.js').AppStats>}
  */
 export async function fetchStats() {
-  const response = await api.get('/stats')
-  return response.data
+  return withRetry(() => api.get('/stats').then((r) => r.data))
 }
 
 /**
