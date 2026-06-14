@@ -20,6 +20,7 @@ import PropTypes from 'prop-types'
 
 import LoadingSphere from './LoadingSphere.jsx'
 import SatelliteTooltip from './SatelliteTooltip.jsx'
+import { useAppContext } from '../../context/AppContext.jsx'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -824,6 +825,109 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
   )
 }
 
+function CatalogConjunctionHighlighter({ conjunction, positions }) {
+  const [time, setTime] = useState(0)
+
+  useFrame((_, delta) => {
+    setTime((t) => t + delta)
+  })
+
+  const { p1, p2, sat1Name, sat2Name, riskLevel } = useMemo(() => {
+    if (!conjunction) return {}
+    const nid1 = String(conjunction.sat1_norad_id ?? conjunction.satellite1_norad ?? conjunction.norad1 ?? '')
+    const nid2 = String(conjunction.sat2_norad_id ?? conjunction.satellite2_norad ?? conjunction.norad2 ?? '')
+    const pData1 = positions.find((p) => String(p.norad_id) === nid1)
+    const pData2 = positions.find((p) => String(p.norad_id) === nid2)
+
+    if (!pData1 || !pData2) return {}
+
+    const pt1 = geoToCartesian(pData1.latitude ?? pData1.lat ?? 0, pData1.longitude ?? pData1.lon ?? 0, pData1.altitude_km ?? pData1.alt ?? 400)
+    const pt2 = geoToCartesian(pData2.latitude ?? pData2.lat ?? 0, pData2.longitude ?? pData2.lon ?? 0, pData2.altitude_km ?? pData2.alt ?? 400)
+
+    return {
+      p1: new THREE.Vector3(...pt1),
+      p2: new THREE.Vector3(...pt2),
+      sat1Name: conjunction.sat1_name ?? conjunction.satellite1_name ?? pData1.name ?? `Sat ${nid1}`,
+      sat2Name: conjunction.sat2_name ?? conjunction.satellite2_name ?? pData2.name ?? `Sat ${nid2}`,
+      riskLevel: conjunction.risk_level ?? 'LOW',
+    }
+  }, [conjunction, positions])
+
+  if (!p1 || !p2) return null
+
+  const riskColor = riskLevel === 'HIGH' ? '#ff4d4d' : riskLevel === 'MEDIUM' ? '#ff9d00' : '#00ff9d'
+  const linePoints = [p1, p2]
+
+  const pulse = 1.0 + Math.sin(time * 8) * 0.15
+
+  return (
+    <group>
+      <Line
+        points={linePoints}
+        color={riskColor}
+        lineWidth={2.5 * pulse}
+        opacity={0.8}
+        transparent
+        depthWrite={false}
+      />
+      <Line
+        points={linePoints}
+        color={riskColor}
+        lineWidth={6.0 * pulse}
+        opacity={0.15}
+        transparent
+        depthWrite={false}
+      />
+
+      <mesh position={p1}>
+        <sphereGeometry args={[0.16 * pulse, 16, 16]} />
+        <meshBasicMaterial color={riskColor} transparent opacity={0.6} />
+      </mesh>
+      <mesh position={p2}>
+        <sphereGeometry args={[0.16 * pulse, 16, 16]} />
+        <meshBasicMaterial color={riskColor} transparent opacity={0.6} />
+      </mesh>
+
+      <Html position={new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5)} distanceFactor={14}>
+        <div
+          style={{
+            background: 'rgba(10, 10, 18, 0.92)',
+            border: `1px solid ${riskColor}`,
+            color: '#e8e8f0',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            fontSize: '9px',
+            fontFamily: 'monospace',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
+            pointerEvents: 'none',
+            transform: 'translate(-50%, -120%)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '3px',
+          }}
+        >
+          <div style={{ fontWeight: 'bold', color: riskColor, letterSpacing: '0.05em' }}>
+            ⚠️ CLOSE APPROACH ALERT ({riskLevel})
+          </div>
+          <div>
+            Objects: {sat1Name} + {sat2Name}
+          </div>
+          <div>
+            Separation: {(conjunction.miss_distance_km ?? conjunction.miss_distance ?? 0.0).toFixed(3)} km
+          </div>
+          <div>
+            Rel Velocity: {(conjunction.relative_velocity ?? conjunction.rel_velocity ?? 7.5).toFixed(1)} km/s
+          </div>
+          <div>
+            Probability: {((conjunction.collision_probability ?? conjunction.probability ?? 0.0) * 100).toFixed(3)}%
+          </div>
+        </div>
+      </Html>
+    </group>
+  )
+}
+
 // ── Inner scene (runs inside Canvas context) ──────────────────────────────────
 
 /**
@@ -835,10 +939,28 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
  * @param {Object}      props.controlsRef
  */
 function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controlsRef, proposedOrbit, simulationResult, simLaunched }) {
+  const { focusedConjunction, setFocusedConjunction } = useAppContext()
   const [hoveredSat, setHoveredSat] = useState(/** @type {Object|null} */ (null))
   const [followActive, setFollowActive] = useState(false)
   const [autoRotateSpeed, setAutoRotateSpeed] = useState(0.5)
   const [conflictFocusPoint, setConflictFocusPoint] = useState(null)
+
+  const focusedMidpoint = useMemo(() => {
+    if (!focusedConjunction) return null
+    const nid1 = String(focusedConjunction.sat1_norad_id ?? focusedConjunction.satellite1_norad ?? focusedConjunction.norad1 ?? '')
+    const nid2 = String(focusedConjunction.sat2_norad_id ?? focusedConjunction.satellite2_norad ?? focusedConjunction.norad2 ?? '')
+    const pData1 = positions.find((p) => String(p.norad_id) === nid1)
+    const pData2 = positions.find((p) => String(p.norad_id) === nid2)
+    if (!pData1 || !pData2) return null
+
+    const pt1 = geoToCartesian(pData1.latitude ?? pData1.lat ?? 0, pData1.longitude ?? pData1.lon ?? 0, pData1.altitude_km ?? pData1.alt ?? 400)
+    const pt2 = geoToCartesian(pData2.latitude ?? pData2.lat ?? 0, pData2.longitude ?? pData2.lon ?? 0, pData2.altitude_km ?? pData2.alt ?? 400)
+
+    return new THREE.Vector3().addVectors(
+      new THREE.Vector3(...pt1),
+      new THREE.Vector3(...pt2)
+    ).multiplyScalar(0.5)
+  }, [focusedConjunction, positions])
 
   // Listen to camera follow and demo events
   useEffect(() => {
@@ -909,7 +1031,15 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
 
   // Camera follow / target centering in useFrame
   useFrame(({ camera }) => {
-    if (followActive && selectedSatCartesian && controlsRef.current) {
+    if (focusedMidpoint && controlsRef.current) {
+      controlsRef.current.target.lerp(focusedMidpoint, 0.1)
+      const cameraTargetDist = camera.position.distanceTo(focusedMidpoint)
+      if (cameraTargetDist > 14.0) {
+        const dir = camera.position.clone().sub(focusedMidpoint).normalize()
+        camera.position.lerp(focusedMidpoint.clone().add(dir.multiplyScalar(13.0)), 0.08)
+      }
+      controlsRef.current.update()
+    } else if (followActive && selectedSatCartesian && controlsRef.current) {
       const [x, y, z] = selectedSatCartesian
       const targetVec = new THREE.Vector3(x, y, z)
       // Smoothly interpolate the controls target to the satellite position
@@ -962,6 +1092,19 @@ function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controls
 
       {/* ── Orbital trail for selected satellite ──────────────────────────── */}
       {selectedSatPos && <OrbitalTrail satellite={selectedSatPos} />}
+
+      {/* ── Conjunction Highlighter for Catalog Conjunctions ─────────────── */}
+      {focusedConjunction && (
+        <>
+          <CatalogConjunctionHighlighter conjunction={focusedConjunction} positions={positions} />
+          {positions.find((p) => String(p.norad_id) === String(focusedConjunction.sat1_norad_id)) && (
+            <OrbitalTrail satellite={positions.find((p) => String(p.norad_id) === String(focusedConjunction.sat1_norad_id))} />
+          )}
+          {positions.find((p) => String(p.norad_id) === String(focusedConjunction.sat2_norad_id)) && (
+            <OrbitalTrail satellite={positions.find((p) => String(p.norad_id) === String(focusedConjunction.sat2_norad_id))} />
+          )}
+        </>
+      )}
       
       {/* ── Proposed Orbit Ghost Ring ────────────────────────────────────── */}
       <ProposedOrbitRing proposedOrbit={proposedOrbit} simulationResult={simulationResult} simLaunched={simLaunched} />

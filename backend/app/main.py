@@ -32,16 +32,21 @@ redis_client: Redis | None = None
 background_tasks: list[asyncio.Task] = []
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    global redis_client
-    await init_db()
+async def _background_ingest() -> None:
+    """Run satellite ingestion in the background so startup is non-blocking."""
     try:
         async with AsyncSessionLocal() as session:
             ingested = await ingest_satellites(session)
-            logger.info("Initial satellite ingestion completed: %s records", ingested)
-    except Exception:  # pragma: no cover - startup safety net
-        logger.exception("Initial satellite ingestion failed")
+            logger.info("Background satellite ingestion completed: %s records", ingested)
+    except Exception:  # pragma: no cover
+        logger.exception("Background satellite ingestion failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    global redis_client
+    # Initialise DB schema synchronously (fast — just CREATE TABLE IF NOT EXISTS)
+    await init_db()
 
     try:
         redis_client = Redis.from_url(settings.REDIS_URL, decode_responses=False)
@@ -53,6 +58,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_scheduler(None)
 
     start_scheduler()
+
+    # Satellite ingestion runs in the background so Render's health-check
+    # succeeds immediately instead of timing out on slow/blocked Celestrak fetches.
+    background_tasks.append(asyncio.create_task(_background_ingest()))
     background_tasks.append(asyncio.create_task(run_conjunction_scan()))
     background_tasks.append(asyncio.create_task(broadcast_positions()))
     background_tasks.append(asyncio.create_task(listen_for_alerts(redis_client)))

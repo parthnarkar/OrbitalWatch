@@ -436,6 +436,8 @@ function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
     simParams,
     simResult,
     simLaunched,
+    focusedConjunction,
+    setFocusedConjunction,
   } = useAppContext()
 
   const [selectedNoradId, setSelectedNoradId] = useState(null)
@@ -526,6 +528,67 @@ function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
           minHeight: 0,
         }}
       >
+        {focusedConjunction && (
+          <div
+            id="focused-conjunction-banner"
+            style={{
+              position: 'absolute',
+              top: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(255, 77, 77, 0.15)',
+              border: '1px solid rgba(255, 77, 77, 0.4)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              borderRadius: '999px',
+              padding: '8px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              zIndex: 100,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(255, 77, 77, 0.15)',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', animation: 'pulse-dot 1.5s infinite' }}>⚠️</span>
+              <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: '#ff4d4d', textTransform: 'uppercase' }}>
+                Conjunction Focus Mode
+              </span>
+            </div>
+            <span style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.2)' }} />
+            <span style={{ fontSize: '11px', color: '#e8e8f0', fontWeight: 500 }}>
+              {focusedConjunction.sat1_name ?? focusedConjunction.satellite1_name ?? 'Sat A'} + {focusedConjunction.sat2_name ?? focusedConjunction.satellite2_name ?? 'Sat B'}
+            </span>
+            <button
+              onClick={() => setFocusedConjunction(null)}
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#ffffff',
+                borderRadius: '999px',
+                padding: '4px 12px',
+                fontSize: '10px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 150ms ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#ff4d4d'
+                e.currentTarget.style.borderColor = '#ff4d4d'
+                e.currentTarget.style.color = '#000000'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'
+                e.currentTarget.style.color = '#ffffff'
+              }}
+            >
+              Exit Focus
+            </button>
+          </div>
+        )}
+
         {/* ── Full-screen Globe ──────────────────────────────────────────────────── */}
         <div className="globe-container">
           <ErrorBoundary label="3D Globe">
@@ -707,6 +770,7 @@ function AppInner() {
     connected,
     setSimOpen,
     setSimParams,
+    setFocusedConjunction,
   } = useAppContext()
 
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
@@ -730,6 +794,7 @@ function AppInner() {
     // 2. Clear selections
     setSelectedSatellite(null)
     setActiveAlert(null)
+    setFocusedConjunction(null)
 
     // 3. Reset filters
     setFilters({
@@ -747,7 +812,7 @@ function AppInner() {
     fetchConjunctions()
       .then((data) => setConjunctions(Array.isArray(data) ? data : []))
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
-  }, [setSelectedSatellite, setActiveAlert, setFilters, setShowDebrisOnly, refetchSatellites])
+  }, [setSelectedSatellite, setActiveAlert, setFocusedConjunction, setFilters, setShowDebrisOnly, refetchSatellites])
 
   /**
    * Called by RescanButton after a successful CelesTrak fetch.

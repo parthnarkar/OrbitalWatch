@@ -56,6 +56,7 @@ Currently, there are over **40,000 tracked artificial objects** orbiting the Ear
 *   **Real-time Socket.IO Streaming**: Streams current satellite geodetic coordinates down to the React frontend at regular telemetry intervals.
 *   **Dynamic Alert Panel**: Lists active and incoming conjunction events color-coded by severity levels (HIGH, MEDIUM, LOW) with simulated audio-visual warnings.
 *   **Automatic Camera Tracking**: Supports locking the Three.js camera to follow a specific satellite's live orbit path and drawing historical orbit tracks.
+*   **3D Conjunction Proximity Visualizer**: Renders real-time close-approach warnings directly on the 3D globe with flashing line overlays, midpoint data labels, intersecting orbital tracks, and smooth camera target centering.
 
 ---
 

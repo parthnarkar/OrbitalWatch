@@ -41,9 +41,16 @@ export default defineConfig(async () => {
       }
     },
 
-    // Target modern browsers for smaller output
+    // Target modern browsers — es2022 avoids esbuild 0.28.x destructuring
+    // transform errors (es2020 triggers a known regression in that version)
+    optimizeDeps: {
+      esbuildOptions: {
+        target: 'es2022',
+      },
+    },
+
     build: {
-      target: 'es2020',
+      target: 'es2022',
       sourcemap: true,
       chunkSizeWarningLimit: 800,
       rollupOptions: {

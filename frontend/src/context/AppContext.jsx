@@ -53,6 +53,7 @@ export function AppProvider({ children }) {
   const [selectedSatellite, setSelectedSatellite] = useState(null)
   const [showDebrisOnly, setShowDebrisOnly] = useState(false)
   const [activeAlert, setActiveAlert] = useState(null)
+  const [focusedConjunction, setFocusedConjunction] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
 
   // Simulation States
@@ -82,6 +83,13 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (activeNav !== 'alerts') {
       setActiveAlert(null)
+    }
+  }, [activeNav])
+
+  // Clear focusedConjunction when navigating away from dashboard
+  useEffect(() => {
+    if (activeNav !== 'dashboard') {
+      setFocusedConjunction(null)
     }
   }, [activeNav])
 
@@ -135,6 +143,8 @@ export function AppProvider({ children }) {
       setShowDebrisOnly,
       activeAlert,
       setActiveAlert,
+      focusedConjunction,
+      setFocusedConjunction,
 
       // Filters
       filters,
@@ -165,6 +175,7 @@ export function AppProvider({ children }) {
       selectedSatellite,
       showDebrisOnly,
       activeAlert,
+      focusedConjunction,
       filters,
       filteredSatellites,
       simOpen,

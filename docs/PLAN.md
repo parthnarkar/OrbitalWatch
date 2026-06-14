@@ -66,3 +66,18 @@ Parsing raw TLE text lines is CPU-intensive. We cache instantiated `EarthSatelli
 _satellite_cache: dict[str, tuple[str, str, EarthSatellite]] = {}
 ```
 This increases propagation execution speeds inside real-time loops by over **5-10x**.
+
+---
+
+## 4. Production Deployment & Visual Visualizer Fixes
+
+### Docker Startup Command (`start.sh`)
+To ensure reliable database schema setup during container builds on Render, the backend Dockerfile runs a `start.sh` startup script. The script applies Alembic schema upgrades at startup and spins up uvicorn to support ASGI Socket.IO connections.
+
+### 3D Conjunction Proximity Visualizer
+To elevate the Space Traffic Control user experience, a client-side Conjunction Proximity Highlighter displays live proximity alerts on the 3D WebGL globe. When an alert is selected:
+1. Geocentric positions of both satellites are resolved from live WebSocket coordinates.
+2. A flashing proximity warning line is drawn between the objects.
+3. Midpoint geodetic coordinates are computed, and a 3D HTML billboard displays miss distance and collision probability.
+4. The globe camera target smoothly centers and locks onto the midpoint.
+

@@ -145,7 +145,7 @@ DetailRow.propTypes = { label: PropTypes.string, value: PropTypes.string }
 function AlertDetail({ conjunction, onClose }) {
   const [show3DPreview, setShow3DPreview] = useState(false)
   const [timeStr, setTimeStr] = useState('')
-  const { setActiveNav } = useAppContext()
+  const { setActiveNav, setFocusedConjunction } = useAppContext()
 
   // Live countdown tick
   useEffect(() => {
@@ -168,6 +168,7 @@ function AlertDetail({ conjunction, onClose }) {
   const handle3DPreview = useCallback(() => {
     setShow3DPreview((v) => !v)
     setActiveNav('dashboard')
+    setFocusedConjunction(conjunction)
     // Emit custom event so ThreeGlobe can pick up both satellites after mount delay
     const norad1 = conjunction?.sat1_norad_id ?? conjunction?.satellite1_norad ?? conjunction?.norad1
     const norad2 = conjunction?.sat2_norad_id ?? conjunction?.satellite2_norad ?? conjunction?.norad2
@@ -177,7 +178,7 @@ function AlertDetail({ conjunction, onClose }) {
       }, 100)
     }
     onClose?.()
-  }, [conjunction, setActiveNav, onClose])
+  }, [conjunction, setActiveNav, setFocusedConjunction, onClose])
 
   if (!conjunction) return null
 
