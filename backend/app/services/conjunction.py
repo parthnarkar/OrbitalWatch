@@ -198,6 +198,7 @@ async def scan_conjunctions(
 
     positions_dict: dict[str, list[tuple[float, float, float] | None]] = {}
     for norad_id, es in es_objects.items():
+        await asyncio.sleep(0)  # Yield control to prevent event loop starvation
         positions = []
         for t_step in t_steps:
             try:
@@ -226,6 +227,7 @@ async def scan_conjunctions(
     # 4. Check for close approaches in candidate pairs
     conjunctions: list[ConjunctionModel] = []
     for id_a, id_b in candidate_pairs:
+        await asyncio.sleep(0)  # Yield control to prevent event loop starvation
         pos_a_list = positions_dict[id_a]
         pos_b_list = positions_dict[id_b]
 

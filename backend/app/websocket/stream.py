@@ -91,7 +91,9 @@ async def broadcast_positions() -> None:
                 satellites = list(result.scalars().all())
 
             data = []
-            for satellite in satellites:
+            for idx, satellite in enumerate(satellites):
+                if idx % 50 == 0:
+                    await asyncio.sleep(0)  # Yield control to prevent event loop starvation
                 payload = _position_payload(satellite)
                 if payload is not None:
                     data.append(payload)
