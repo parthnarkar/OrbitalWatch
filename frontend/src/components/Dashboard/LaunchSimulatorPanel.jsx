@@ -23,6 +23,7 @@ export default function LaunchSimulatorPanel({ satellites }) {
     simLaunched,
     setSimLaunched,
     positions: livePositions,
+    setActiveNav,
   } = useAppContext()
 
   const workerRef = useRef(null)
@@ -218,7 +219,7 @@ export default function LaunchSimulatorPanel({ satellites }) {
           </div>
         </div>
         <button
-          onClick={() => setSimOpen(false)}
+          onClick={() => setActiveNav('dashboard')}
           style={{
             background: 'none',
             border: 'none',

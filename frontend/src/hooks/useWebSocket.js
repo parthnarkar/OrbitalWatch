@@ -103,6 +103,13 @@ function useWebSocket(isGlobeView = true) {
 
     ws.on('new_alert', handleAlert)
 
+    const handleConjunctionsUpdated = () => {
+      console.log('[useWebSocket] Conjunctions updated event received from backend')
+      window.dispatchEvent(new CustomEvent('ow:conjunctions-updated'))
+    }
+
+    ws.on('conjunctions_updated', handleConjunctionsUpdated)
+
     // ── Heartbeat Check ──────────────────────────────────────────────────────
     const checkHeartbeat = () => {
       const elapsed = Date.now() - lastMessageTime.current
@@ -125,6 +132,7 @@ function useWebSocket(isGlobeView = true) {
       ws.off('connect_error')
       ws.off('satellite_positions', handlePositions)
       ws.off('new_alert', handleAlert)
+      ws.off('conjunctions_updated', handleConjunctionsUpdated)
       ws.disconnect()
       wsRef.current = null
     }

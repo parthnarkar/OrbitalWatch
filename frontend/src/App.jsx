@@ -10,6 +10,7 @@ import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
 import ThreeGlobe from './components/Globe/ThreeGlobe.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import ConnectingOverlay from './components/Layout/ConnectingOverlay.jsx'
 
 // Dashboard components
 import SatelliteInfo    from './components/Dashboard/SatelliteInfo.jsx'
@@ -23,7 +24,7 @@ import { useKeyboardShortcuts, SHORTCUTS } from './components/Layout/KeyboardSho
 
 import useSatellites from './hooks/useSatellites.js'
 import { fetchStats, fetchConjunctions, wakeUpBackend } from './services/api.js'
-import RescanButton from './components/Dashboard/RescanButton.jsx'
+import RefreshButton from './components/Dashboard/RefreshButton.jsx'
 import LaunchSimulatorPanel from './components/Dashboard/LaunchSimulatorPanel.jsx'
 import './index.css'
 
@@ -356,7 +357,7 @@ FloatingFilterPanel.defaultProps = { stats: null }
 
 // ── Top-Right Camera Controls ─────────────────────────────────────────────────
 
-function CameraControls({ onReset, onRescan }) {
+function CameraControls({ onReset, onRefresh }) {
   return (
     <div
       style={{
@@ -377,7 +378,7 @@ function CameraControls({ onReset, onRescan }) {
         style={{
           width: 44,
           height: 44,
-          borderRadius: '50%',
+          borderRadius: '8px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -407,25 +408,25 @@ function CameraControls({ onReset, onRescan }) {
         </span>
       </button>
 
-      {/* Rescan button — fetch fresh TLE data from CelesTrak */}
-      <RescanButton onRescanComplete={onRescan} />
+      {/* Refresh button — telemetry refresh and conjunction update */}
+      <RefreshButton onRefreshComplete={onRefresh} />
     </div>
   )
 }
 
 CameraControls.propTypes = {
-  onReset:  PropTypes.func.isRequired,
-  onRescan: PropTypes.func,
+  onReset:   PropTypes.func.isRequired,
+  onRefresh: PropTypes.func,
 }
 
-CameraControls.defaultProps = { onRescan: null }
+CameraControls.defaultProps = { onRefresh: null }
 
 // ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
  * Full-screen globe view with floating panels.
  */
-function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
+function GlobeView({ onResetAll, onRefresh, controlsRef, stats, satellites }) {
   const {
     filteredSatellites,
     filters,
@@ -607,7 +608,7 @@ function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
           {/* Top-right camera controls */}
           <CameraControls
             onReset={onResetAll}
-            onRescan={onRescan}
+            onRefresh={onRefresh}
           />
         </div>
 
@@ -712,13 +713,13 @@ function GlobeView({ onResetAll, onRescan, controlsRef, stats, satellites }) {
 
 GlobeView.propTypes = {
   onResetAll:    PropTypes.func.isRequired,
-  onRescan:      PropTypes.func,
+  onRefresh:     PropTypes.func,
   controlsRef:   PropTypes.object.isRequired,
   stats:         PropTypes.object,
   satellites:    PropTypes.array.isRequired,
 }
 
-GlobeView.defaultProps = { onRescan: null }
+GlobeView.defaultProps = { onRefresh: null }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
 
@@ -758,17 +759,18 @@ AlertsView.propTypes = {
 
 function AppInner() {
   const controlsRef = useRef(null)
-  const [stats, setStats]               = useState(null)
-  const [conjunctions, setConjunctions] = useState([])
+  const [stats, setStats] = useState(null)
   const {
     setActiveNav,
     setSelectedSatellite,
     setActiveAlert,
     setFilters,
     setShowDebrisOnly,
-    alerts: liveAlerts,
+    liveAlerts,
+    conjunctions,
+    setConjunctions,
+    alerts: mergedConjunctions,
     connected,
-    setSimOpen,
     setSimParams,
     setFocusedConjunction,
   } = useAppContext()
@@ -817,23 +819,31 @@ function AppInner() {
   }, [setSelectedSatellite, setActiveAlert, setFocusedConjunction, setFilters, setShowDebrisOnly, refetchSatellites])
 
   /**
-   * Called by RescanButton after a successful CelesTrak fetch.
-   * Re-fetches the satellite catalogue and stats so the globe/counts update.
+   * Called by RefreshButton after a successful telemetry refresh is initiated.
+   * Immediately updates last scan timestamp and re-fetches stats, satellites, and conjunctions.
    */
-  const handleRescanComplete = useCallback(() => {
+  const handleRefreshComplete = useCallback((result) => {
+    if (result && result.timestamp) {
+      setStats((prev) => ({
+        ...prev,
+        last_scan: result.timestamp,
+      }))
+    }
     refetchSatellites()
     fetchStats()
       .then(setStats)
-      .catch((e) => console.error('[App] post-rescan fetchStats error:', e))
-  }, [refetchSatellites])
+      .catch((e) => console.error('[App] post-refresh fetchStats error:', e))
+    fetchConjunctions()
+      .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+      .catch((e) => console.error('[App] post-refresh fetchConjunctions error:', e))
+  }, [refetchSatellites, setConjunctions])
 
   // Parse URL configuration parameters on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const simParam = params.get('sim')
     if (simParam) {
-      setActiveNav('dashboard')
-      setSimOpen(true)
+      setActiveNav('simulator')
       if (simParam === 'phoenix-1') {
         setSimParams({
           name: 'Phoenix-1',
@@ -860,7 +870,7 @@ function AppInner() {
         })
       }
     }
-  }, [setActiveNav, setSimOpen, setSimParams])
+  }, [setActiveNav, setSimParams])
 
   // ── Backend wake-up + initial data load ─────────────────────────────────
   useEffect(() => {
@@ -900,59 +910,25 @@ function AppInner() {
     }
   }, [connected, refetchSatellites])
 
-  // Merge live WebSocket alerts with static historical conjunctions
-  const mergedConjunctions = useMemo(() => {
-    const map = new Map()
-    conjunctions.forEach((c) => {
-      const id = c.id ?? c.conjunction_id
-      if (id != null) map.set(String(id), c)
-    })
-    liveAlerts.forEach((a) => {
-      const id = a.id ?? a.conjunction_id
-      if (id != null) map.set(String(id), a)
-    })
-    return Array.from(map.values()).sort((a, b) => {
-      const ta = new Date(a.approach_time ?? a.tca ?? 0).getTime()
-      const tb = new Date(b.approach_time ?? b.tca ?? 0).getTime()
-      return tb - ta
-    })
-  }, [conjunctions, liveAlerts])
+  // Listen for background conjunction recalculation completion event from WebSocket
+  useEffect(() => {
+    const handler = () => {
+      console.log('[App] Re-fetching conjunctions after background scan update')
+      fetchConjunctions()
+        .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+        .catch((e) => console.error('[App] background update fetchConjunctions error:', e))
+    }
+    window.addEventListener('ow:conjunctions-updated', handler)
+    return () => window.removeEventListener('ow:conjunctions-updated', handler)
+  }, [setConjunctions])
+
+
 
   return (
     <>
       {/* ── Backend connecting overlay ─────────────────────────────────────── */}
       {!backendReady && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            background: '#080810',
-            gap: '1.5rem',
-          }}
-        >
-          {/* Pulsing orbit ring */}
-          <div style={{
-            width: 72, height: 72, borderRadius: '50%',
-            border: '2px solid transparent',
-            borderTopColor: '#00d4ff',
-            borderRightColor: 'rgba(0,212,255,0.3)',
-            animation: 'spin 1s linear infinite',
-          }} />
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ color: '#00d4ff', fontWeight: 700, fontSize: '1rem', margin: 0 }}>
-              Connecting to OrbitalWatch Backend
-            </p>
-            <p style={{ color: '#5a5a80', fontSize: '0.78rem', margin: '0.4rem 0 0' }}>
-              {wakeAttempt > 1
-                ? `Waking up server… attempt ${wakeAttempt} of 20`
-                : 'Establishing connection…'}
-            </p>
-          </div>
-          <p style={{ color: '#3a3a5a', fontSize: '0.68rem', margin: 0 }}>
-            Free-tier backends may take up to 60 seconds to wake up
-          </p>
-        </div>
+        <ConnectingOverlay wakeAttempt={wakeAttempt} />
       )}
 
       <MainLayout demoEnabled={demoEnabled} onToggleDemo={toggleDemo}>
@@ -963,7 +939,7 @@ function AppInner() {
           return (
             <GlobeView
               onResetAll={handleResetAll}
-              onRescan={handleRescanComplete}
+              onRefresh={handleRefreshComplete}
               controlsRef={controlsRef}
               stats={stats}
               satellites={satellites}

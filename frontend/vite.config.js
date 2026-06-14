@@ -86,6 +86,16 @@ export default defineConfig(async () => {
             })
           }
         },
+        '/ping': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          secure: false,
+          configure: (proxy) => {
+            proxy.on('error', (err) => {
+              console.log('[Vite Proxy Error] /ping:', err.message)
+            })
+          }
+        },
         '/socket.io': {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,

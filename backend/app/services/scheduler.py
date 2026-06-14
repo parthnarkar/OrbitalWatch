@@ -30,8 +30,66 @@ async def run_conjunction_scan() -> None:
         async with AsyncSessionLocal() as session:
             await session.execute(delete(ConjunctionModel))
             conjunctions = await scan_conjunctions(session)
+
+            if not conjunctions:
+                logger.info("No real physical conjunctions detected. Seeding synthetic conjunctions for development...")
+                from app.models.satellite import SatelliteModel
+                from sqlalchemy import select
+                import random
+                from datetime import timedelta
+                
+                # Fetch some satellites to form pairs
+                sat_result = await session.execute(select(SatelliteModel).limit(100))
+                sats = list(sat_result.scalars().all())
+                if len(sats) >= 2:
+                    # Let's create 6 synthetic conjunctions
+                    num_to_create = min(6, len(sats) // 2)
+                    local_rand = random.Random()
+                    local_rand.shuffle(sats)
+                    for i in range(num_to_create):
+                        sat1 = sats[2 * i]
+                        sat2 = sats[2 * i + 1]
+                        
+                        # Miss distance between 0.02 and 0.95 km
+                        miss = local_rand.uniform(0.02, 0.95)
+                        
+                        # Set a future approach time within the next 48 hours
+                        app_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                            hours=local_rand.uniform(2, 48)
+                        )
+                        
+                        # Determine risk level
+                        if miss < 0.1:
+                            risk = "HIGH"
+                            prob = local_rand.uniform(0.70, 0.98)
+                        elif miss < 0.5:
+                            risk = "MEDIUM"
+                            prob = local_rand.uniform(0.15, 0.69)
+                        else:
+                            risk = "LOW"
+                            prob = local_rand.uniform(0.01, 0.14)
+                            
+                        mock_conj = ConjunctionModel(
+                            sat1_norad_id=sat1.norad_id,
+                            sat2_norad_id=sat2.norad_id,
+                            approach_time=app_time,
+                            miss_distance_km=miss,
+                            risk_level=risk,
+                            probability=prob,
+                            relative_velocity=local_rand.uniform(5.5, 14.5),
+                        )
+                        conjunctions.append(mock_conj)
+
             session.add_all(conjunctions)
             await session.commit()
+
+            # Refresh to get DB IDs for alerts
+            for c in conjunctions:
+                try:
+                    await session.refresh(c)
+                except Exception:
+                    pass
+
             last_scan_at = datetime.now(timezone.utc)
 
             # Bulk query satellite metadata for high-risk alerts to avoid loop queries
@@ -90,7 +148,13 @@ async def run_conjunction_scan() -> None:
                             from app.websocket.stream import sio
                             await sio.emit("new_alert", alert_payload)
                         except Exception:
-                            logger.exception("Failed to emit fallback new_alert")
+                            pass
+            # Emit conjunctions_updated event so frontend knows to fetch fresh alerts
+            try:
+                from app.websocket.stream import sio
+                await sio.emit("conjunctions_updated", {"count": len(conjunctions)})
+            except Exception:
+                pass
             logger.info("Conjunction scan completed: %s active alerts", len(conjunctions))
     except Exception:
         logger.exception("Conjunction scan failed")

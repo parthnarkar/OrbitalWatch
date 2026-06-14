@@ -28,7 +28,8 @@ const WS_BASE = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
  */
 export async function pingBackend() {
   try {
-    await axios.get(`${WS_BASE}/ping`, { timeout: 6_000 })
+    const url = `${WS_BASE === '/' ? '' : WS_BASE}/ping`
+    await axios.get(url, { timeout: 6_000 })
     return true
   } catch {
     return false
@@ -75,15 +76,7 @@ async function withRetry(fn, { attempts = 3, baseDelayMs = 1_500 } = {}) {
   throw lastErr
 }
 
-// Separate instance with longer timeout for rescan operations
-const apiSlow = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
-  timeout: 90_000,
-  headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  },
-})
+
 
 // ── Request Interceptor ───────────────────────────────────────────────────────
 
@@ -186,34 +179,16 @@ export async function fetchStats() {
 }
 
 /**
- * Ping CelesTrak to check connectivity before a full rescan.
- *
- * @returns {Promise<{ reachable: boolean, latency_ms: number, message: string }>}
- */
-export async function pingCelesTrak() {
-  const response = await api.get('/rescan/ping')
-  return response.data
-}
-
-/**
- * Trigger a fresh CelesTrak data fetch and catalog update.
- * Uses a longer timeout (90s) because fetching 500 TLEs can take time.
+ * Trigger a telemetry refresh and background conjunction calculation.
  *
  * @returns {Promise<{
  *   success: boolean,
- *   fetched: number,
- *   valid: number,
- *   rejected: number,
- *   updated: number,
- *   inserted: number,
- *   total_in_catalog: number,
- *   cooldown_remaining: number,
- *   timestamp: string,
  *   message: string,
+ *   timestamp: string,
  * }>}
  */
-export async function triggerRescan() {
-  const response = await apiSlow.post('/rescan')
+export async function triggerRefresh() {
+  const response = await api.post('/refresh')
   return response.data
 }
 

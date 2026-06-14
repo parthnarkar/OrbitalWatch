@@ -36,6 +36,7 @@ export function AppProvider({ children }) {
     const VIEW_MAP = {
       dashboard: 'globe',
       alerts: 'alerts',
+      simulator: 'simulator',
     }
     return VIEW_MAP[activeNav] ?? 'globe'
   }, [activeNav])
@@ -44,11 +45,31 @@ export function AppProvider({ children }) {
   // Pass whether we are on the globe view to queue incoming alerts accordingly
   const {
     positions,
-    alerts,
+    alerts: liveAlerts,
     connected,
     pendingAlerts,
     clearPendingAlerts,
   } = useWebSocket(activeView === 'globe')
+
+  const [conjunctions, setConjunctions] = useState([])
+
+  // Merge live WebSocket alerts with static historical conjunctions
+  const mergedConjunctions = useMemo(() => {
+    const map = new Map()
+    conjunctions.forEach((c) => {
+      const id = c.id ?? c.conjunction_id
+      if (id != null) map.set(String(id), c)
+    })
+    liveAlerts.forEach((a) => {
+      const id = a.id ?? a.conjunction_id
+      if (id != null) map.set(String(id), a)
+    })
+    return Array.from(map.values()).sort((a, b) => {
+      const ta = new Date(a.approach_time ?? a.tca ?? 0).getTime()
+      const tb = new Date(b.approach_time ?? b.tca ?? 0).getTime()
+      return tb - ta
+    })
+  }, [conjunctions, liveAlerts])
 
   const [selectedSatellite, setSelectedSatellite] = useState(null)
   const [showDebrisOnly, setShowDebrisOnly] = useState(false)
@@ -72,6 +93,18 @@ export function AppProvider({ children }) {
   const [simActive, setSimActive] = useState(false)
   const [simResult, setSimResult] = useState(null)
   const [simLaunched, setSimLaunched] = useState(false)
+
+  // Sync simOpen with activeNav for unified navigation page logic
+  useEffect(() => {
+    if (activeNav === 'simulator') {
+      setSimOpen(true)
+    } else {
+      setSimOpen(false)
+      setSimLaunched(false)
+      setSimResult(null)
+      setSimActive(false)
+    }
+  }, [activeNav, setSimOpen, setSimLaunched, setSimResult, setSimActive])
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -130,7 +163,10 @@ export function AppProvider({ children }) {
 
       // WebSocket Data
       positions,
-      alerts,
+      liveAlerts,
+      conjunctions,
+      setConjunctions,
+      alerts: mergedConjunctions,
       connected,
       pendingAlerts,
       clearPendingAlerts,
@@ -167,7 +203,9 @@ export function AppProvider({ children }) {
       activeNav,
       activeView,
       positions,
-      alerts,
+      liveAlerts,
+      conjunctions,
+      mergedConjunctions,
       connected,
       pendingAlerts,
       clearPendingAlerts,

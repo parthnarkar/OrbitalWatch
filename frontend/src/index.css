@@ -349,8 +349,13 @@ code {
   to { transform: rotate(360deg) translateX(12px) rotate(-360deg); }
 }
 
-/* ── Rescan button animations ─────────────────────────────────────────── */
+/* ── Rescan/Refresh button animations ─────────────────────────────────────────── */
 @keyframes rescan-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes refresh-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
@@ -361,6 +366,12 @@ code {
 }
 
 @keyframes rescan-success-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0,255,157,0.5); }
+  50%  { box-shadow: 0 0 0 10px rgba(0,255,157,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,255,157,0); }
+}
+
+@keyframes refresh-success-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(0,255,157,0.5); }
   50%  { box-shadow: 0 0 0 10px rgba(0,255,157,0); }
   100% { box-shadow: 0 0 0 0 rgba(0,255,157,0); }

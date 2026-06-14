@@ -15,7 +15,7 @@ from sqlalchemy import func, select, text
 from app.api.conjunctions import router as conjunctions_router
 from app.api.propagate import router as propagate_router
 from app.api.satellites import router as satellites_router
-from app.api.rescan import router as rescan_router
+from app.api.refresh import router as refresh_router
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, init_db
 from app.models.conjunction import ConjunctionModel
@@ -94,7 +94,7 @@ app.add_middleware(
 app.include_router(satellites_router)
 app.include_router(propagate_router)
 app.include_router(conjunctions_router)
-app.include_router(rescan_router)
+app.include_router(refresh_router)
 
 
 @app.get("/")

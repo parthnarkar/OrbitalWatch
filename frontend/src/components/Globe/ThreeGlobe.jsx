@@ -579,13 +579,13 @@ HoverTooltip.propTypes = {
 }
 
 function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
-  if (simLaunched) return null
+  if (simLaunched || !proposedOrbit) return null
 
   const points = useMemo(() => {
+    if (!proposedOrbit) return []
     if (simulationResult && simulationResult.proposedOrbitPoints) {
       return simulationResult.proposedOrbitPoints.map((p) => eciToThree(p))
     }
-    if (!proposedOrbit) return []
     const { altitudeKm, inclination, eccentricity, raan } = proposedOrbit
     const solvedRaan = raan === '' || raan === null ? 0.0 : Number(raan)
     return getOrbitPoints(Number(altitudeKm), Number(inclination), Number(eccentricity), solvedRaan)
@@ -614,7 +614,7 @@ function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
 }
 
 function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) {
-  if (!simLaunched) return null
+  if (!simLaunched || !proposedOrbit) return null
   const [time, setTime] = useState(0)
 
   useEffect(() => {
@@ -716,6 +716,7 @@ function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) 
 }
 
 function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }) {
+  if (!proposedOrbit) return null
   const [time, setTime] = useState(0)
 
   useEffect(() => {
