@@ -102,20 +102,26 @@ export default defineConfig(async () => {
           secure: false,
           ws: true,
           configure: (proxy) => {
-            proxy.on('error', (err, req, resOrSocket) => {
-              console.log('[Vite Proxy Error] /socket.io:', err.message)
-              if (resOrSocket && typeof resOrSocket.writeHead !== 'function') {
+            proxy.on('error', (err, _req, resOrSocket) => {
+              if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED' && err.code !== 'ECONNREFUSED') {
+                console.log('[Vite Proxy Error] /socket.io:', err.message)
+              }
+              if (resOrSocket && typeof resOrSocket.destroy === 'function') {
                 resOrSocket.destroy()
               }
             })
             proxy.on('open', (proxySocket) => {
               proxySocket.on('error', (err) => {
-                console.log('[Vite Target WS Socket Error]:', err.message)
+                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+                  console.log('[Vite Target WS Socket Error]:', err.message)
+                }
               })
             })
-            proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
               socket.on('error', (err) => {
-                console.log('[Vite Client WS Socket Error]:', err.message)
+                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+                  console.log('[Vite Client WS Socket Error]:', err.message)
+                }
               })
             })
           }

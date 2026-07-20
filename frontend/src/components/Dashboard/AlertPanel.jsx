@@ -229,8 +229,12 @@ function AlertPanel({ conjunctions, onSelect }) {
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden',
         width: '100%',
+        height: '100%',
+        flex: 1,
         display: 'flex',
         flexDirection: 'column',
+        minHeight: 0,
+        minWidth: 0,
       }}
     >
       {/* ── Header + filter tabs ─────────────────────────────────────────────── */}
@@ -302,7 +306,7 @@ function AlertPanel({ conjunctions, onSelect }) {
       </div>
 
       {/* ── Table ───────────────────────────────────────────────────────────── */}
-      <div style={{ overflowX: 'auto', flex: 1 }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: 0 }}>
         {displayed.length === 0 ? (
           <div
             style={{

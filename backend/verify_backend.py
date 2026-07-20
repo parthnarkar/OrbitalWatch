@@ -5,7 +5,9 @@ import asyncio
 import httpx
 import socketio
 
-BASE_URL = "http://localhost:8000"
+import os
+
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
 
 async def check_http(client: httpx.AsyncClient, label: str, path: str) -> None:

@@ -13,7 +13,6 @@ const LAUNCH_SITES = {
 export default function LaunchSimulatorPanel({ satellites }) {
   const {
     simOpen,
-    setSimOpen,
     simParams,
     setSimParams,
     simActive,
@@ -22,7 +21,6 @@ export default function LaunchSimulatorPanel({ satellites }) {
     setSimResult,
     simLaunched,
     setSimLaunched,
-    positions: livePositions,
     setActiveNav,
   } = useAppContext()
 
@@ -185,7 +183,9 @@ export default function LaunchSimulatorPanel({ satellites }) {
         left: 24,
         top: 24,
         bottom: 24,
-        width: 330,
+        width: 'min(360px, calc(100vw - 48px))',
+        maxWidth: 'calc(100vw - 32px)',
+        maxHeight: 'calc(100% - 48px)',
         background: 'rgba(8, 8, 14, 0.90)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
@@ -197,6 +197,7 @@ export default function LaunchSimulatorPanel({ satellites }) {
         zIndex: 50,
         pointerEvents: 'auto',
         overflow: 'hidden',
+        boxSizing: 'border-box',
         animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
       }}
     >
@@ -208,7 +209,8 @@ export default function LaunchSimulatorPanel({ satellites }) {
           justifyContent: 'space-between',
           padding: '1rem 1.25rem',
           borderBottom: '1px solid var(--space-border)',
-          background: 'rgba(255,255,255,0.02)'
+          background: 'rgba(255,255,255,0.02)',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -239,7 +241,7 @@ export default function LaunchSimulatorPanel({ satellites }) {
       </div>
 
       {/* Panel Scrollable Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', minHeight: 0 }}>
         
         {/* Name & Launch Site */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>

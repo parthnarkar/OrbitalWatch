@@ -42,6 +42,18 @@ async def _background_ingest() -> None:
         logger.exception("Background satellite ingestion failed")
 
 
+async def _ingest_then_scan() -> None:
+    """Run satellite ingestion first, then trigger initial conjunction scan.
+
+    This guarantees the conjunction scan always finds satellites in the DB
+    rather than racing against the ingestion background task.
+    Render's health-check still succeeds immediately because these run in a
+    background task — the server is fully started before this coroutine runs.
+    """
+    await _background_ingest()
+    await run_conjunction_scan()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global redis_client
@@ -59,10 +71,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     start_scheduler()
 
-    # Satellite ingestion runs in the background so Render's health-check
-    # succeeds immediately instead of timing out on slow/blocked Celestrak fetches.
-    background_tasks.append(asyncio.create_task(_background_ingest()))
-    background_tasks.append(asyncio.create_task(run_conjunction_scan()))
+    # _ingest_then_scan chains ingestion → conjunction scan sequentially so
+    # the first scan always has satellites available.
+    background_tasks.append(asyncio.create_task(_ingest_then_scan()))
     background_tasks.append(asyncio.create_task(broadcast_positions()))
     background_tasks.append(asyncio.create_task(listen_for_alerts(redis_client)))
     try:

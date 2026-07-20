@@ -12,6 +12,9 @@ vi.mock('./components/Globe/ThreeGlobe', () => ({
 vi.mock('./services/api', () => ({
   fetchStats: vi.fn().mockReturnValue(new Promise(() => {})),
   fetchConjunctions: vi.fn().mockReturnValue(new Promise(() => {})),
+  wakeUpBackend: vi.fn().mockResolvedValue(true),
+  pingBackend: vi.fn().mockResolvedValue(true),
+  triggerRefresh: vi.fn().mockResolvedValue({ success: true, message: 'ok', timestamp: new Date().toISOString() }),
 }));
 
 // Mock socket.io-client

@@ -30,17 +30,6 @@ const R = 6.5
 /** Maximum number of satellites rendered via InstancedMesh. */
 const MAX_INSTANCES = 500
 
-/** Colour map keyed by satellite object_type (lower-cased). */
-const TYPE_COLORS = {
-  payload: '#00ff9d',
-  debris: '#ff4d4d',
-  'rocket body': '#ff9d00',
-  unknown: '#888888',
-}
-
-/** Fallback colour when object_type is not found in the map. */
-const DEFAULT_COLOR = '#888888'
-
 // ── Coordinate helpers ────────────────────────────────────────────────────────
 
 /**
@@ -263,6 +252,10 @@ function EarthMesh({ paused }) {
       </mesh>
     </group>
   )
+}
+
+EarthMesh.propTypes = {
+  paused: PropTypes.bool,
 }
 
 // ── Satellite dots (InstancedMesh) ────────────────────────────────────────────
@@ -579,17 +572,15 @@ HoverTooltip.propTypes = {
 }
 
 function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
-  if (simLaunched || !proposedOrbit) return null
-
   const points = useMemo(() => {
-    if (!proposedOrbit) return []
+    if (simLaunched || !proposedOrbit) return []
     if (simulationResult && simulationResult.proposedOrbitPoints) {
       return simulationResult.proposedOrbitPoints.map((p) => eciToThree(p))
     }
     const { altitudeKm, inclination, eccentricity, raan } = proposedOrbit
     const solvedRaan = raan === '' || raan === null ? 0.0 : Number(raan)
     return getOrbitPoints(Number(altitudeKm), Number(inclination), Number(eccentricity), solvedRaan)
-  }, [proposedOrbit, simulationResult])
+  }, [proposedOrbit, simulationResult, simLaunched])
 
   const color = useMemo(() => {
     if (!simulationResult) return '#ffffff'
@@ -600,7 +591,7 @@ function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
     return '#ffffff'
   }, [simulationResult])
 
-  if (points.length === 0) return null
+  if (simLaunched || !proposedOrbit || points.length === 0) return null
 
   return (
     <Line
@@ -613,8 +604,13 @@ function ProposedOrbitRing({ proposedOrbit, simulationResult, simLaunched }) {
   )
 }
 
+ProposedOrbitRing.propTypes = {
+  proposedOrbit: PropTypes.object,
+  simulationResult: PropTypes.object,
+  simLaunched: PropTypes.bool,
+}
+
 function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) {
-  if (!simLaunched || !proposedOrbit) return null
   const [time, setTime] = useState(0)
 
   useEffect(() => {
@@ -622,11 +618,13 @@ function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) 
   }, [simulationResult, proposedOrbit])
 
   useFrame((_, delta) => {
-    setTime((t) => t + delta)
+    if (simLaunched && proposedOrbit) {
+      setTime((t) => t + delta)
+    }
   })
 
-  const { points, ascentPoints, p1, p2, color, isRejected } = useMemo(() => {
-    if (!proposedOrbit || !simulationResult) return {}
+  const { points, ascentPoints, color } = useMemo(() => {
+    if (!simLaunched || !proposedOrbit || !simulationResult) return {}
     const { altitudeKm, inclination, eccentricity, raan, launchSite } = proposedOrbit
     const solvedRaan = raan === '' || raan === null ? 0.0 : Number(raan)
     const pts = simulationResult.proposedOrbitPoints
@@ -645,25 +643,18 @@ function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) 
     const isRej = simulationResult.status === 'REJECTED'
     const clr = simulationResult.status === 'APPROVED' ? '#00ff9d' : isRej ? '#ff4466' : '#ffbb33'
 
-    let pt1 = null
-    let pt2 = null
-    if (simulationResult.proposedPos && simulationResult.conflictPos) {
-      pt1 = eciToThree(simulationResult.proposedPos)
-      pt2 = eciToThree(simulationResult.conflictPos)
-    }
+    return { points: pts, ascentPoints: ascPts, color: clr }
+  }, [proposedOrbit, simulationResult, simLaunched])
 
-    return { points: pts, ascentPoints: ascPts, p1: pt1, p2: pt2, color: clr, isRejected: isRej }
-  }, [proposedOrbit, simulationResult])
-
-  if (!points || points.length === 0) return null
+  if (!simLaunched || !proposedOrbit || !points || points.length === 0) return null
 
   const isAscent = time < 3.0
   
   let currentPos = new THREE.Vector3()
   if (isAscent) {
     const t = time / 3.0
-    const index = Math.min(Math.floor(t * ascentPoints.length), ascentPoints.length - 1)
-    if (ascentPoints[index]) currentPos.copy(ascentPoints[index])
+    const index = Math.min(Math.floor(t * (ascentPoints?.length || 1)), (ascentPoints?.length || 1) - 1)
+    if (ascentPoints && ascentPoints[index]) currentPos.copy(ascentPoints[index])
   } else {
     const elapsed = time - 3.0
     const idx = Math.floor(elapsed * 25) % points.length
@@ -672,7 +663,7 @@ function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) 
 
   return (
     <group>
-      {isAscent && (
+      {isAscent && ascentPoints && (
         <Line
           points={ascentPoints}
           color="#ffaa00"
@@ -715,8 +706,13 @@ function SimulationTrajectory({ proposedOrbit, simulationResult, simLaunched }) 
   )
 }
 
+SimulationTrajectory.propTypes = {
+  proposedOrbit: PropTypes.object,
+  simulationResult: PropTypes.object,
+  simLaunched: PropTypes.bool,
+}
+
 function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }) {
-  if (!proposedOrbit) return null
   const [time, setTime] = useState(0)
 
   useEffect(() => {
@@ -739,14 +735,13 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
     return { p1: pt1, p2: pt2, color: clr }
   }, [proposedOrbit, simulationResult])
 
-  if (!p1 || !p2) return null
+  if (!proposedOrbit || !p1 || !p2) return null
 
   // If launched, hide the highlight during the 3-second ascent phase
   if (simLaunched && time < 3.0) return null
 
   return (
     <group>
-      {/* Line between proposed satellite and conflicting object */}
       <Line
         points={[p1, p2]}
         color={color}
@@ -755,7 +750,6 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
         transparent
       />
 
-      {/* Pulsing marker at proposed satellite position */}
       <mesh position={p1}>
         <sphereGeometry args={[0.1, 16, 16]} />
         <meshBasicMaterial color={color} />
@@ -765,7 +759,6 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
         <meshBasicMaterial color={color} transparent opacity={0.3} wireframe />
       </mesh>
 
-      {/* Pulsing marker at conflicting object position */}
       <mesh position={p2}>
         <sphereGeometry args={[0.1, 16, 16]} />
         <meshBasicMaterial color="#ff4466" />
@@ -779,7 +772,6 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
         <meshBasicMaterial color="#ff4466" side={THREE.DoubleSide} transparent opacity={0.7} />
       </mesh>
 
-      {/* Label at proposed satellite position */}
       <Html position={p1} distanceFactor={15}>
         <div
           style={{
@@ -801,7 +793,6 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
         </div>
       </Html>
 
-      {/* Label at conflicting object position */}
       <Html position={p2} distanceFactor={15}>
         <div
           style={{
@@ -824,6 +815,12 @@ function ConjunctionHighlighter({ proposedOrbit, simulationResult, simLaunched }
       </Html>
     </group>
   )
+}
+
+ConjunctionHighlighter.propTypes = {
+  proposedOrbit: PropTypes.object,
+  simulationResult: PropTypes.object,
+  simLaunched: PropTypes.bool,
 }
 
 function CatalogConjunctionHighlighter({ conjunction, positions }) {
@@ -929,6 +926,11 @@ function CatalogConjunctionHighlighter({ conjunction, positions }) {
   )
 }
 
+CatalogConjunctionHighlighter.propTypes = {
+  conjunction: PropTypes.object,
+  positions: PropTypes.array,
+}
+
 // ── Inner scene (runs inside Canvas context) ──────────────────────────────────
 
 /**
@@ -940,7 +942,7 @@ function CatalogConjunctionHighlighter({ conjunction, positions }) {
  * @param {Object}      props.controlsRef
  */
 function GlobeScene({ satellites, positions, selectedNoradId, onSelect, controlsRef, proposedOrbit, simulationResult, simLaunched }) {
-  const { focusedConjunction, setFocusedConjunction } = useAppContext()
+  const { focusedConjunction } = useAppContext()
   const [hoveredSat, setHoveredSat] = useState(/** @type {Object|null} */ (null))
   const [followActive, setFollowActive] = useState(false)
   const [autoRotateSpeed, setAutoRotateSpeed] = useState(0.5)
@@ -1165,7 +1167,7 @@ function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controls
   return (
     <Canvas
       camera={{ position: [0, 0, 20], fov: 50 }}
-      style={{ background: '#000010', width: '100%', height: '100%' }}
+      style={{ background: '#000010', width: '100%', height: '100%', zIndex: 10 }}
       dpr={[1, 2]}
       shadows
     >
@@ -1183,6 +1185,17 @@ function ThreeGlobe({ satellites, positions, selectedNoradId, onSelect, controls
       </Suspense>
     </Canvas>
   )
+}
+
+GlobeScene.propTypes = {
+  satellites: PropTypes.array,
+  positions: PropTypes.array,
+  selectedNoradId: PropTypes.string,
+  onSelect: PropTypes.func,
+  controlsRef: PropTypes.object,
+  proposedOrbit: PropTypes.object,
+  simulationResult: PropTypes.object,
+  simLaunched: PropTypes.bool,
 }
 
 ThreeGlobe.propTypes = {

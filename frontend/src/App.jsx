@@ -4,7 +4,7 @@
  * top-right camera controls, bottom stats bar.
  */
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import { AppProvider, useAppContext } from './context/AppContext.jsx'
 import MainLayout from './components/Layout/MainLayout.jsx'
@@ -93,7 +93,6 @@ function FloatingFilterPanel({
   })
 
   // Fall back to stats API counts if live counts are 0
-  const totalFromStats = stats?.total_satellites ?? stats?.total ?? 0
   const debrisFromStats = stats?.debris_count ?? stats?.total_debris ?? stats?.debris ?? 0
   const totalLive = satellites.length
 
@@ -127,7 +126,7 @@ function FloatingFilterPanel({
       }}
     >
       {/* ── Shortcuts Section ── */}
-      <div style={panelStyle}>
+      <div className="hide-mobile" style={panelStyle}>
         <button
           onClick={() => setShortcutsOpen(!shortcutsOpen)}
           style={{
@@ -345,12 +344,16 @@ function FloatingFilterPanel({
 }
 
 FloatingFilterPanel.propTypes = {
-  stats:      PropTypes.object,
-  filters:    PropTypes.object.isRequired,
-  onChange:   PropTypes.func.isRequired,
-  satellites: PropTypes.array.isRequired,
-  openSection: PropTypes.string.isRequired,
-  setOpenSection: PropTypes.func.isRequired,
+  stats:           PropTypes.object,
+  filters:         PropTypes.object.isRequired,
+  onChange:        PropTypes.func.isRequired,
+  satellites:      PropTypes.array.isRequired,
+  shortcutsOpen:   PropTypes.bool.isRequired,
+  setShortcutsOpen: PropTypes.func.isRequired,
+  filtersOpen:     PropTypes.bool.isRequired,
+  setFiltersOpen:  PropTypes.func.isRequired,
+  legendOpen:      PropTypes.bool.isRequired,
+  setLegendOpen:   PropTypes.func.isRequired,
 }
 
 FloatingFilterPanel.defaultProps = { stats: null }
@@ -473,12 +476,6 @@ function GlobeView({ onResetAll, onRefresh, controlsRef, stats, satellites }) {
       return satellites.find((s) => String(s.norad_id) === String(noradId)) ?? null
     })
   }, [satellites, setSelectedSatellite])
-
-  const handleCenter = useCallback(() => {
-    if (selectedNoradId && controlsRef.current) {
-      window.dispatchEvent(new CustomEvent('ow:follow-satellite'))
-    }
-  }, [selectedNoradId, controlsRef])
 
   // Listen for 3D preview event from AlertDetail
   useEffect(() => {
@@ -730,11 +727,16 @@ function AlertsView({ conjunctions }) {
     <div
       id="alerts-view"
       style={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
         padding: '1rem',
         background: 'var(--space-bg)',
-        width: '100%',
-        flex: 1,
-        overflowY: 'auto',
+        overflow: 'hidden',
       }}
     >
       <AlertPanel
@@ -766,19 +768,25 @@ function AppInner() {
     setActiveAlert,
     setFilters,
     setShowDebrisOnly,
-    liveAlerts,
     conjunctions,
     setConjunctions,
     alerts: mergedConjunctions,
     connected,
     setSimParams,
     setFocusedConjunction,
+    setSatellites: setContextSatellites,
   } = useAppContext()
 
   const [backendReady, setBackendReady] = useState(false)
   const [wakeAttempt, setWakeAttempt]   = useState(0)
   const { enabled: demoEnabled, toggle: toggleDemo } = useDemoMode()
   const { satellites, refetch: refetchSatellites } = useSatellites()
+
+  useEffect(() => {
+    if (Array.isArray(satellites) && satellites.length > 0) {
+      setContextSatellites(satellites)
+    }
+  }, [satellites, setContextSatellites])
 
   useKeyboardShortcuts({
     onToggleDemoMode: toggleDemo,
@@ -816,7 +824,7 @@ function AppInner() {
     fetchConjunctions()
       .then((data) => setConjunctions(Array.isArray(data) ? data : []))
       .catch((e) => console.error('[App] fetchConjunctions error:', e))
-  }, [setSelectedSatellite, setActiveAlert, setFocusedConjunction, setFilters, setShowDebrisOnly, refetchSatellites])
+  }, [setSelectedSatellite, setActiveAlert, setFocusedConjunction, setFilters, setShowDebrisOnly, refetchSatellites, setConjunctions])
 
   /**
    * Called by RefreshButton after a successful telemetry refresh is initiated.
@@ -908,7 +916,7 @@ function AppInner() {
         .catch((e) => console.error('[App] sync fetchConjunctions error:', e))
       refetchSatellites()
     }
-  }, [connected, refetchSatellites])
+  }, [connected, refetchSatellites, setConjunctions])
 
   // Listen for background conjunction recalculation completion event from WebSocket
   useEffect(() => {

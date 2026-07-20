@@ -71,8 +71,8 @@ This increases propagation execution speeds inside real-time loops by over **5-1
 
 ## 4. Production Deployment & Visual Visualizer Fixes
 
-### Docker Startup Command (`start.sh`)
-To ensure reliable database schema setup during container builds on Render, the backend Dockerfile runs a `start.sh` startup script. The script applies Alembic schema upgrades at startup and spins up uvicorn to support ASGI Socket.IO connections.
+### Backend Startup Command (`app.py`)
+To ensure reliable database schema setup during service startup on cloud providers, `app.py` automatically applies Alembic schema upgrades at startup before launching Uvicorn for ASGI Socket.IO connections.
 
 ### 3D Conjunction Proximity Visualizer
 To elevate the Space Traffic Control user experience, a client-side Conjunction Proximity Highlighter displays live proximity alerts on the 3D WebGL globe. When an alert is selected:

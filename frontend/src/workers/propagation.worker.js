@@ -69,7 +69,8 @@ function getTleAgeDays(line1) {
     
     const diffMs = Date.now() - epochDate.getTime();
     return Math.max(0, diffMs / (1000 * 60 * 60 * 24));
-  } catch (e) {
+  } catch (err) {
+    console.error('[Worker] getTleAgeDays error:', err);
     return 0;
   }
 }
@@ -97,6 +98,7 @@ self.onmessage = function(e) {
   try {
     proposedSatRec = twoline2satrec(proposedTle.line1, proposedTle.line2);
   } catch (err) {
+    console.error('[Worker] Failed to parse generated proposed TLE:', err);
     self.postMessage({ error: "Failed to parse generated proposed TLE" });
     return;
   }
@@ -119,6 +121,7 @@ self.onmessage = function(e) {
       try {
         inc = parseFloat(sat.tle_line2.substring(8, 16).trim());
       } catch (err) {
+        console.error('[Worker] Failed to parse inclination for candidate:', err);
         continue;
       }
 
@@ -141,6 +144,7 @@ self.onmessage = function(e) {
         });
       }
     } catch (err) {
+      console.error('[Worker] Error processing candidate satellite:', err);
       // ignore parsing errors for bad catalog items
     }
   }
@@ -224,7 +228,11 @@ self.onmessage = function(e) {
       
       const trialTle = generateTleLines(trialAlt, trialInc, parseFloat(eccentricity), solvedRaan);
       let trialSatRec;
-      try { trialSatRec = twoline2satrec(trialTle.line1, trialTle.line2); } catch (e) { continue; }
+      try { trialSatRec = twoline2satrec(trialTle.line1, trialTle.line2); } 
+      catch (err) { 
+        console.error('[Worker] Failed to parse trial TLE:', err);  
+        continue; 
+      }
       
       let isSafe = true;
       let trialMinDist = Infinity;
