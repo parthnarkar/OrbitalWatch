@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://orbital:orbital@localhost:5432/orbitalwatch"
+        default="sqlite+aiosqlite:///./orbitalwatch.db"
     )
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
     CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:5173"])

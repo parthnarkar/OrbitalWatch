@@ -1,41 +1,53 @@
 # 🛰️ OrbitalWatch Frontend
 
-OrbitalWatch is a modern, high-performance, real-time Space Situational Awareness (SSA) dashboard that tracks orbiting objects, calculates collision risks (conjunctions), and visualizes satellites on an interactive 3D WebGL Earth.
+OrbitalWatch is a modern, high-performance, real-time Space Situational Awareness (SSA) & Space Traffic Control dashboard. It tracks orbiting space objects, predicts proximity collision risks (conjunctions), simulates proposed launch trajectory insertion safety in Web Workers, and visualizes satellite mechanics on an interactive 3D WebGL Earth.
 
-The frontend is built using **React 19**, **Vite 6**, **Three.js**, **React Three Fiber (R3F)**, **Tailwind CSS v4**, and **Recharts**.
+The frontend is built using **React 19**, **Vite 6**, **Three.js**, **React Three Fiber (R3F)**, **Tailwind CSS v4**, **Socket.IO Client (v4)**, and **Recharts**.
 
 ---
 
 ## 🏗️ Architecture & Component Flow
 
 ```mermaid
-graph TD
+flowchart TB
     subgraph Core Shell
         Main[src/main.jsx] --> App[src/App.jsx]
         App --> Context[src/context/AppContext.jsx]
         Context --> Layout[src/components/Layout/MainLayout.jsx]
     end
 
-    subgraph Views
-        Layout -->|Nav: dashboard| GV[src/App.jsx: GlobeView]
-        Layout -->|Nav: alerts| AV[src/App.jsx: AlertsView]
+    subgraph Navigation & Views
+        Layout -->|Nav: globe| GV[Globe View]
+        Layout -->|Nav: alerts| AV[Alerts View]
+        Layout -->|Nav: simulator| SV[Launch Simulator View]
     end
 
-    subgraph Globe View Elements
+    subgraph 3D Globe Elements
         GV --> TG[src/components/Globe/ThreeGlobe.jsx]
-        GV --> FFP[Floating Filter Panel]
-        GV --> CC[Camera Controls]
-        GV --> SI[src/components/Dashboard/SatelliteInfo.jsx]
-        GV --> Chart1[src/components/Dashboard/AltitudeChart.jsx]
-        GV --> Chart2[src/components/Dashboard/TypeDistribution.jsx]
+        GV --> ST[src/components/Globe/SatelliteTooltip.jsx]
+        GV --> LS[src/components/Globe/LoadingSphere.jsx]
     end
 
-    subgraph Alerts View Elements
+    subgraph Dashboard Components
+        GV --> SI[src/components/Dashboard/SatelliteInfo.jsx]
+        GV --> SC[src/components/Dashboard/StatsCards.jsx]
+        GV --> FB[src/components/Dashboard/FilterBar.jsx]
+        GV --> SB[src/components/Dashboard/SearchBar.jsx]
+        GV --> RB[src/components/Dashboard/RefreshButton.jsx]
+        GV --> OC[src/components/Dashboard/OrbitalClock.jsx]
+        GV --> AC[src/components/Dashboard/AltitudeChart.jsx]
+        GV --> TD[src/components/Dashboard/TypeDistribution.jsx]
         AV --> AP[src/components/Dashboard/AlertPanel.jsx]
         AV --> AD[src/components/Dashboard/AlertDetail.jsx]
+        SV --> LSP[src/components/Dashboard/LaunchSimulatorPanel.jsx]
     end
 
-    subgraph Real-Time & API
+    subgraph Off-Thread Workers
+        LSP -->|Post orbit params| Worker[src/workers/propagation.worker.js]
+        Worker -->|Return 30-day clearance & Delta-V| LSP
+    end
+
+    subgraph Real-Time & API Integration
         Context --> useWS[src/hooks/useWebSocket.js]
         useWS --> WS[src/services/websocket.js]
         Context --> API[src/services/api.js]
@@ -43,66 +55,78 @@ graph TD
 ```
 
 ### Component Breakdown
-*   **App Root ([src/App.jsx](src/App.jsx))**: Handles primary routing layout switches (Globe vs Alerts), wraps global overlays, and mounts controls.
-*   **State Provider ([src/context/AppContext.jsx](src/context/AppContext.jsx))**: Serves as the central state hub. Exposes real-time satellite locations, conjunction alert histories, filters, coordinate caches, and the globally active selection profiles.
-*   **3D WebGL Globe ([src/components/Globe/ThreeGlobe.jsx](src/components/Globe/ThreeGlobe.jsx))**: Implemented using React Three Fiber. Renders the textured Earth, atmosphere glow, active orbit trajectory lines, and high-performance point clouds for 500+ tracking elements. Includes hover tooltips, click selection, and camera-following modes.
-*   **Real-time WebSocket Hook ([src/hooks/useWebSocket.js](src/hooks/useWebSocket.js))**: Manages the socket.io event lifecycle, updating coordinate buffers and appending incoming critical collision warnings. Includes an active heartbeat check (reconnects after 70s of silence).
-*   **Dashboard Panels ([src/components/Dashboard](src/components/Dashboard/))**:
-    *   `SatelliteInfo`: Details NORAD metadata, launch year, country of origin, altitude, velocity, and SGP4 TLE lines.
-    *   `AlertPanel` & `AlertDetail`: Renders conjunction warnings (approach timing, miss distance, risk probability) and supports focusing coordinates on the 3D globe.
-    *   `AltitudeChart` & `TypeDistribution`: Data visualizations built on `Recharts` for live altitudes (Area Chart) and catalog classification counts (Pie Chart).
-    *   `DemoMode`: Automated simulation flow that guides the user through active satellites and conjunction events.
+
+*   **App Core Shell ([src/App.jsx](src/App.jsx))**: Orchestrates primary view navigation (Globe, Alerts, Launch Simulator), manages global modal overlays, keyboard shortcuts listener, and floating action controls.
+*   **State Provider ([src/context/AppContext.jsx](src/context/AppContext.jsx))**: Central React Context store. Manages real-time satellite coordinate buffers, active selection profiles, filter criteria, search queries, launch simulator inputs, conjunction warning records, and camera tracking targets.
+*   **3D WebGL Globe ([src/components/Globe/ThreeGlobe.jsx](src/components/Globe/ThreeGlobe.jsx))**: Powered by React Three Fiber. Features instanced mesh point clouds (`InstancedMesh`) for 500+ space objects, high-resolution Earth textures, custom atmospheric glow shaders, starfield skybox, historical orbit tracks, flashing conjunction proximity markers, and camera-following dynamics.
+*   **Launch Trajectory Clearance Simulator ([src/components/Dashboard/LaunchSimulatorPanel.jsx](src/components/Dashboard/LaunchSimulatorPanel.jsx))**: Configures proposed launch site, insertion altitude, inclination, eccentricity, RAAN, payload mass, and deorbit strategies. Delegates SGP4 30-day forecast calculations to a background Web Worker.
+*   **Off-Thread Web Worker ([src/workers/propagation.worker.js](src/workers/propagation.worker.js))**: Runs pure JavaScript SGP4 propagation off the main UI thread. Calculates Foster collision probability ($P_c$) using catalog TLE age variance and derives minimum Delta-$V$ Hohmann/plane-change orbital maneuver recommendations.
+*   **Real-Time WebSocket Hook ([src/hooks/useWebSocket.js](src/hooks/useWebSocket.js))**: Listens to Socket.IO events, updating satellite positions every 5 seconds and appending incoming high-risk conjunction alerts with audio-visual notifications.
+*   **Dashboard Panels & Widgets ([src/components/Dashboard/](src/components/Dashboard/))**:
+    *   `SatelliteInfo`: Displays detailed NORAD catalog metadata, launch date, country of origin, altitude, velocity, orbital period, and raw TLE lines.
+    *   `AlertPanel` & `AlertDetail`: Displays close-approach events, miss distance, collision probability, relative velocity, and camera focus triggers.
+    *   `StatsCards`, `AltitudeChart` & `TypeDistribution`: Real-time catalog metrics and analytics rendered via Recharts.
+    *   `SearchBar` & `FilterBar`: Full-text search and category filtering (Payload vs Debris, altitude ranges, risk levels).
+    *   `RefreshButton` & `OrbitalClock`: Manual background rescan triggers and UTC orbital clock display.
+    *   `DemoMode`: Guided interactive simulation tour.
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **UI Framework**: React 19 (Functional Components + Context API)
-- **Build System**: Vite 6 + ESBuild
-- **Styling**: Tailwind CSS v4 (native build integration)
-- **3D Graphics**: Three.js + React Three Fiber (R3F) + @react-three/drei
-- **Real-Time Client**: Socket.IO Client (v4)
-- **HTTP Client**: Axios (configured with interceptors)
-- **Charts**: Recharts
-- **Testing**: Vitest + React Testing Library + JSDom
+*   **UI Framework**: React 19 (Functional Components + Hooks + Context API)
+*   **Build Tool & Dev Server**: Vite 6 + ESBuild
+*   **Styling**: Tailwind CSS v4 (native build pipeline integration)
+*   **3D Graphics Engine**: Three.js + React Three Fiber (R3F) + `@react-three/drei`
+*   **Off-Thread Physics Engine**: Dedicated Web Worker (`propagation.worker.js`)
+*   **Real-Time Data Streaming**: Socket.IO Client (v4)
+*   **HTTP Client**: Axios (configured with base URL and error interceptors)
+*   **Data Visualization**: Recharts
+*   **Iconography & UI**: Lucide React
+*   **Testing Suite**: Vitest + React Testing Library + JSDom
+*   **Code Quality**: ESLint
 
 ---
 
 ## ⚙️ Environment Variables
 
-The application uses Vite-specific environment configurations. Update variables in your `.env`, `.env.local` or `.env.production` files:
+Vite manages environment configuration automatically. Variables must begin with the `VITE_` prefix:
 
-| Variable | Description | Local Default |
-| :--- | :--- | :--- |
-| `VITE_API_URL` | Base URL of the backend REST API | `http://localhost:8000/api` |
-| `VITE_WS_URL` | Base URL of the backend WebSocket server | `http://localhost:8000` |
+| Variable | Description | Local Dev (`.env.development`) | Production (`.env.production`) |
+| :--- | :--- | :--- | :--- |
+| `VITE_API_URL` | Base REST API URL | `http://localhost:8000/api` | `https://<your-backend-domain>/api` |
+| `VITE_WS_URL` | Base Socket.IO WebSocket target URL | `http://localhost:8000` | `https://<your-backend-domain>` |
+
+> [!NOTE]
+> In local development, `vite.config.js` configures proxy endpoints so requests to `/api` and `/socket.io` are automatically forwarded to the backend server running on `http://localhost:8000`.
 
 ---
 
 ## 🚀 Setup & Local Development
 
-### 1. Prerequisites
-Ensure you have [Node.js](https://nodejs.org/) (v18.0.0 or higher) and [npm](https://www.npmjs.com/) installed.
+### Prerequisites
+*   **Node.js**: v18.0.0 or higher
+*   **npm**: v9.0.0 or higher
 
-### 2. Install Dependencies
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-### 3. Run Development Server
+### 2. Start Development Server
 ```bash
 npm run dev
 ```
-Once started, the dashboard is accessible at `http://localhost:5173`.
+Open your browser and navigate to `http://localhost:5173`.
 
-### 4. Code Quality & Formatting
-Run the linter to verify syntax correctness:
+### 3. Code Quality & Linting
+Verify syntax correctness and code style:
 ```bash
 npm run lint
 ```
 
-### 5. Run Unit Tests
-Validate component integrity and hooks via Vitest:
+### 4. Run Unit Tests
+Execute unit tests via Vitest:
 ```bash
 npm run test
 ```
@@ -111,13 +135,13 @@ npm run test
 
 ## 📦 Build & Production Deployment
 
-To compile the application into fully optimized static assets:
+To compile static production assets:
 ```bash
 npm run build
 ```
-The bundled files will write to the `dist/` directory, ready to be hosted on Netlify, Vercel, AWS S3, or GitHub Pages.
+Optimized assets will be output to the `dist/` directory, ready to deploy to Vercel, Netlify, or AWS S3.
 
-To run a preview of the production build locally:
+To preview the built production bundle locally:
 ```bash
 npm run preview
 ```
@@ -126,26 +150,35 @@ npm run preview
 
 ## 🎹 Keyboard Shortcuts
 
-Accelerate dashboard interaction with these built-in keyboard hotkeys:
+Accelerate navigation across the dashboard using built-in keybindings:
 
 | Key | Action |
 | :---: | :--- |
-| `/` | Focus search bar input |
-| `g` | Switch view to 3D Globe |
-| `a` | Switch view to Conjunction Alerts table |
-| `f` | Lock/Follow camera target to selected satellite |
-| `d` | Toggle automated Demo Mode |
-| `Esc` | Close any open panels, cards, or overlays |
-| `?` | Open keyboard shortcut references modal |
+| <kbd>/</kbd> | Focus search bar input |
+| <kbd>g</kbd> | Switch view to 3D Earth Globe |
+| <kbd>a</kbd> | Switch view to Conjunction Alerts table |
+| <kbd>f</kbd> | Lock / unlock camera tracking on selected satellite |
+| <kbd>d</kbd> | Toggle automated Demo Mode simulation tour |
+| <kbd>?</kbd> | Open keyboard shortcuts modal reference |
+| <kbd>Esc</kbd> | Close active panels, cards, or overlays |
+
+---
+
+## ⚡ Performance Optimizations
+
+*   **InstancedMesh WebGL Rendering**: Renders 500+ satellite point cloud spheres inside a single Three.js draw call in `ThreeGlobe.jsx`, keeping framerates locked at **60 FPS**.
+*   **Off-Thread Web Worker Computation**: Delegates heavy 30-day SGP4 launch clearance calculations to `propagation.worker.js`, preventing main-thread blocking or UI frame drops.
+*   **5-Second Position Buffer Sync**: Smoothly interpolates satellite coordinates between 5-second Socket.IO telemetry telemetry pushes.
+*   **React Context Selector Memoization**: Prevents unnecessary component re-renders when filtering or updating active selection targets.
 
 ---
 
 ## 🌐 Browser Support
 
-This dashboard relies on **WebGL** to render the interactive 3D globe and CSS Grid/Flexbox layouts. 
-*   **Google Chrome** (and Chromium-based browsers like Microsoft Edge, Brave, Opera)
+This dashboard requires **WebGL hardware acceleration** to render the 3D globe and interactive Canvas elements. Supported browsers include:
+*   **Google Chrome** & Chromium-based browsers (Edge, Brave, Opera)
 *   **Mozilla Firefox**
 *   **Apple Safari** (macOS & iOS)
 
 > [!IMPORTANT]
-> Ensure **WebGL hardware acceleration** is enabled in your browser settings to prevent frame rate drops during 3D point cloud rendering.
+> Ensure **WebGL hardware acceleration** is enabled in browser settings for optimal 60 FPS performance.

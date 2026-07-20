@@ -10,8 +10,9 @@ import { useAppContext } from '../../context/AppContext.jsx'
 // ── Mobile nav items ──────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Globe',   emoji: '🌍' },
-  { id: 'alerts',    label: 'Alerts',  emoji: '⚠️' },
+  { id: 'dashboard', label: 'Globe',     emoji: '🌍' },
+  { id: 'alerts',    label: 'Alerts',    emoji: '⚠️' },
+  { id: 'simulator', label: 'Simulator', emoji: '🚀' },
 ]
 
 // ── MobileSheet Component ─────────────────────────────────────────────────────

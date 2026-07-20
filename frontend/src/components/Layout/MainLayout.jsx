@@ -6,6 +6,7 @@
 import PropTypes from 'prop-types'
 import Header from './Header.jsx'
 import MobileSheet from './MobileSheet.jsx'
+import MobileScrollControls from './MobileScrollControls.jsx'
 import { useAppContext } from '../../context/AppContext.jsx'
 
 /**
@@ -25,10 +26,7 @@ function MainLayout({ children, onNavChange, demoEnabled, onToggleDemo }) {
   }
 
   return (
-    <div
-      id="main-layout"
-      style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#000000' }}
-    >
+    <div id="main-layout">
       {/* ── Sticky Header ─────────────────────────────────────────────────────── */}
       <Header
         connected={connected}
@@ -40,9 +38,12 @@ function MainLayout({ children, onNavChange, demoEnabled, onToggleDemo }) {
       />
 
       {/* ── Full-width Main Area ──────────────────────────────────────────────── */}
-      <main id="main-content" role="main" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <main id="main-content" role="main">
         {typeof children === 'function' ? children({ activeView, activeNav }) : children}
       </main>
+
+      {/* ── Mobile Floating Scroll Controls ───────────────────────────────────── */}
+      <MobileScrollControls />
 
       {/* ── Mobile Bottom Sheet ───────────────────────────────────────────────── */}
       <MobileSheet alertCount={alerts?.length ?? 0} />

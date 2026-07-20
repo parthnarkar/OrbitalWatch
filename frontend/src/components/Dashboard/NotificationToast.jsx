@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import PropTypes from 'prop-types'
 
 /** Risk level color mapping */
@@ -83,21 +84,27 @@ export function NotificationToast({ alert, onDismiss, onClick }) {
     setIsExiting(true)
   }
 
-  return (
+  return createPortal(
     <div
       onClick={onClick}
       className={isExiting ? 'toast-exit' : 'toast-enter'}
       style={{
-        background: '#0f0f1a',
+        position: 'fixed',
+        top: 20,
+        right: 20,
+        zIndex: 2147483647,
+        background: 'rgba(12, 12, 22, 0.98)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
         borderLeft: `4px solid ${riskColor}`,
-        borderTop: '1px solid var(--space-border, #1a1a2e)',
-        borderRight: '1px solid var(--space-border, #1a1a2e)',
-        borderBottom: '1px solid var(--space-border, #1a1a2e)',
-        borderRadius: '8px',
+        borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+        borderRight: '1px solid rgba(255, 255, 255, 0.12)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
+        borderRadius: '12px',
         padding: '16px',
-        maxWidth: '400px',
-        width: '320px',
-        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+        maxWidth: '380px',
+        width: 'calc(100vw - 32px)',
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 212, 255, 0.2)',
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
@@ -150,7 +157,8 @@ export function NotificationToast({ alert, onDismiss, onClick }) {
       <div style={{ fontSize: '0.8rem', color: 'var(--space-text, #e8e8f0)', fontWeight: 500, lineHeight: 1.4 }}>
         Close approach: <span style={{ fontWeight: 700 }}>{sat1}</span> &amp; <span style={{ fontWeight: 700 }}>{sat2}</span> {relativeTime(approachTime)}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

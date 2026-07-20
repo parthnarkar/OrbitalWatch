@@ -153,6 +153,8 @@ export function AppProvider({ children }) {
     })
   }, [positions, filters, showDebrisOnly])
 
+  const [satellites, setSatellites] = useState([])
+
   // Memoize the context value to prevent unnecessary re-renders in consumers
   const value = useMemo(
     () => ({
@@ -161,8 +163,10 @@ export function AppProvider({ children }) {
       setActiveNav,
       activeView,
 
-      // WebSocket Data
+      // WebSocket & REST Catalog Data
       positions,
+      satellites,
+      setSatellites,
       liveAlerts,
       conjunctions,
       setConjunctions,
@@ -203,6 +207,7 @@ export function AppProvider({ children }) {
       activeNav,
       activeView,
       positions,
+      satellites,
       liveAlerts,
       conjunctions,
       mergedConjunctions,

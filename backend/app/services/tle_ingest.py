@@ -56,12 +56,9 @@ async def fetch_tle_from_celestrak(category: str) -> list[dict[str, str]]:
             index += 1
             continue
         norad_id = line1[2:7].strip()
-        print(f"Parsed record: {name} (NORAD: {norad_id})")
-        print(f"  Line 1: {line1}")
-        print(f"  Line 2: {line2}")
         records.append({"name": name, "line1": line1, "line2": line2, "norad_id": norad_id})
         index += 3
-    print(f"Total parsed records for category '{category}': {len(records)}")
+    logger.info("Total parsed records for category '%s': %d", category, len(records))
     return records
 
 

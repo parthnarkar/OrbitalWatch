@@ -3,6 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import PropTypes from 'prop-types'
 import { triggerRefresh } from '../../services/api.js'
 
@@ -50,27 +51,29 @@ function RefreshToast({ message, variant, onDismiss }) {
   }
   const c = colors[variant] ?? colors.info
 
-  return (
+  return createPortal(
     <div
       role="alert"
       aria-live="assertive"
       style={{
         position: 'fixed',
-        top: 80,
-        right: 24,
-        zIndex: 9000,
+        top: 20,
+        right: 20,
+        zIndex: 2147483647,
         display: 'flex',
         alignItems: 'flex-start',
         gap: '0.75rem',
         padding: '0.875rem 1.125rem',
-        background: 'rgba(10,10,18,0.97)',
+        background: 'rgba(10,10,18,0.98)',
         border: `1px solid ${c.border}`,
         borderLeft: `3px solid ${c.text}`,
         borderRadius: 12,
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
-        maxWidth: 340,
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.95), 0 0 20px rgba(0,212,255,0.2)',
+        maxWidth: 360,
+        width: 'calc(100vw - 32px)',
+        pointerEvents: 'auto',
         animation: 'slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
       }}
     >
@@ -104,7 +107,8 @@ function RefreshToast({ message, variant, onDismiss }) {
       >
         ✕
       </button>
-    </div>
+    </div>,
+    document.body
   )
 }
 

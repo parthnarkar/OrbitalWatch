@@ -1,108 +1,97 @@
 # 🛰️ OrbitalWatch Backend
 
-FastAPI backend for satellite catalog ingestion, SGP4 orbital propagation, conjunction risk assessments, and real-time live position streaming.
+FastAPI backend engine for satellite catalog ingestion, SGP4 orbital propagation, conjunction risk assessments, and real-time live position streaming via Socket.IO.
 
 ---
 
 ## 🏗️ System Architecture
 
 ```mermaid
-graph TD
-    subgraph Data & Scheduling
-        C[Celestrak TLE Source] -->|Fetch TLE| I[TLE Ingest Engine]
-        I -->|Write / Balance| DB[(Database: SQLite/Postgres)]
-        S[APScheduler Daemon] -->|Triggers every 5m| CS[Conjunction Scanner]
-        DB -->|Query Satellites| CS
-        CS -->|Store Conjunctions| DB
+flowchart TB
+    subgraph Data & Ingestion
+        Celestrak["🌌 CelesTrak GP API"] -->|Fetch TLE categories| Ingest["📥 TLE Ingestion Service"]
+        Ingest -->|Upsert metadata| DB[("💾 PostgreSQL / SQLite DB")]
     end
 
-    subgraph Messaging & Real-Time
-        CS -->|Publish Alert| R{Redis Pub/Sub}
-        R -->|Alert Stream| SIO[Socket.IO Server]
-        CS -->|Fallback Direct Emit| SIO
-        DB -->|Fetch Positions| SIO
-        SIO -->|Broadcaster Task| WS[Websocket clients]
+    subgraph Physics & Scheduling
+        Scheduler["⏰ APScheduler Daemon"] -->|Every 5m or manual trigger| ConjunctionEngine["⚙️ Conjunction Analyzer"]
+        DB -->|Query Satellites| ConjunctionEngine
+        ConjunctionEngine -->|Store Conjunctions| DB
+        ConjunctionEngine -->|Publish High-Risk Alerts| Redis["🔴 Redis Pub/Sub"]
     end
 
-    subgraph REST API
-        F[FastAPI Router] -->|Queries| DB
-        F -->|Orbit Calculations| P[SGP4 Propagator]
+    subgraph Messaging & WebSocket Streaming
+        Redis -->|Alert Channel| AlertListener["⚡ Alert Listener"]
+        AlertListener -->|Push new_alert| SocketIO["🔌 Socket.IO Server"]
+        Broadcaster["🛰️ Position Broadcaster (5s loop)"] -->|Propagate SGP4| SocketIO
+        SocketIO -->|satellite_positions & alerts| Client["⚛️ React Dashboard"]
     end
 
-    WS -.->|Real-time Feed| Client[Frontend App]
-    F -.->|JSON API| Client
+    subgraph REST API Router
+        FastAPI["⚡ FastAPI Application"] -->|Query DB & Propagate SGP4| Client
+    end
 ```
 
 ### Key Subsystems
-*   **TLE Ingestion & Balancing Engine ([app/services/tle_ingest.py](app/services/tle_ingest.py))**: Automatically pulls orbital elements (TLEs) from Celestrak. If the network is unreachable, it generates synthetically valid TLE arrays with high-variance orbital properties to ensure development environment consistency.
-*   **Orbit Propagator ([app/services/propagation.py](app/services/propagation.py))**: Leverages `skyfield` and `sgp4` libraries to resolve coordinates (Latitude, Longitude, Altitude), velocities, and orbital period profiles at any custom time vector.
-*   **Conjunction Analyzer ([app/services/conjunction.py](app/services/conjunction.py))**: Computes upcoming proximity events (miss distance, collision probability, relative velocity, threat level) across the active catalog.
-*   **Real-time Streaming Hub ([app/websocket/stream.py](app/websocket/stream.py))**: Streams active coordinates of up to 500 satellites/debris objects every 60 seconds using asynchronous `python-socketio`. Connects to Redis to listen for high-risk proximity alert events and pushes them to connected clients instantly.
+*   **TLE Ingestion & Fallback Engine ([app/services/tle_ingest.py](app/services/tle_ingest.py))**: Automatically pulls live orbital elements (TLEs) from CelesTrak. If CelesTrak is unreachable, it generates synthetically valid TLE arrays with high-variance orbital properties to ensure development environment reliability.
+*   **Orbit Propagator ([app/services/propagation.py](app/services/propagation.py))**: Leverages `skyfield` and `sgp4` libraries to resolve coordinates (Latitude, Longitude, Altitude), velocities, and orbital period profiles at any target UTC time. Caches compiled `EarthSatellite` binary objects for a **500%–1000%** performance gain.
+*   **Conjunction Analyzer ([app/services/conjunction.py](app/services/conjunction.py))**: Executes multi-phase spatial and temporal filtering (Geocentric shell filter $\rightarrow$ Coarse 10m step scan $\rightarrow$ 1m time refinement loop) to detect close-approach events within 1.0 km over a 72-hour forecast window.
+*   **Real-time Streaming Hub ([app/websocket/stream.py](app/websocket/stream.py))**: Broadcasts propagated geodetic positions of up to 500 active objects every **5 seconds** over Socket.IO. Connects to Redis Pub/Sub to push instant high-risk conjunction alerts.
 
 ---
 
 ## 🛠️ Tech Stack & Dependencies
 
-- **Web Server**: [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (ASGI standard)
-- **Database & ORM**: [SQLAlchemy 2.0](https://www.sqlalchemy.org/) (Asyncio) + [Alembic](https://alembic.sqlalchemy.org/)
-- **Orbit Calculation**: [Skyfield](https://rhodesmill.org/skyfield/) + SGP4
-- **Real-Time Layer**: [python-socketio](https://python-socketio.readthedocs.io/)
-- **Distributed Cache / Broker**: [Redis](https://redis.io/)
-- **Scheduling**: [APScheduler](https://apscheduler.readthedocs.io/)
-- **Testing**: [pytest](https://docs.pytest.org/) + [pytest-asyncio](https://github.com/pytest-dev/pytest-asyncio)
+- **Web Framework**: [FastAPI 0.109+](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) (ASGI standard)
+- **Database & ORM**: [SQLAlchemy 2.0 Async](https://www.sqlalchemy.org/) + [Alembic](https://alembic.sqlalchemy.org/) (Supports SQLite & PostgreSQL)
+- **Orbit Calculation**: [Skyfield](https://rhodesmill.org/skyfield/) + [SGP4](https://pypi.org/project/sgp4/)
+- **Real-Time Layer**: [python-socketio (v4)](https://python-socketio.readthedocs.io/)
+- **Distributed Cache / PubSub**: [Redis](https://redis.io/)
+- **Background Scheduling**: [APScheduler](https://apscheduler.readthedocs.io/)
+- **Testing**: [pytest](https://docs.pytest.org/) + `pytest-asyncio` + `httpx`
 
 ---
 
 ## ⚙️ Setup & Local Development
 
 ### 1. Configure Environment Variables
-Copy the template `.env.example` and customize settings:
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Default parameters are configured for local development using **SQLite** (`orbitalwatch.db`) and local **Redis** server.
+Default parameters use local **SQLite** (`orbitalwatch.db`) and fallback in-process event emission if Redis is unavailable.
 
 ### 2. Install Dependencies
-Initialize your virtual environment and install packages:
+Initialize your Python virtual environment and install packages:
+* **Windows**: `python -m venv .venv` && `.venv\Scripts\activate`
+* **macOS/Linux**: `python3 -m venv .venv` && `source .venv/bin/activate`
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 3. Run Database Migrations
-Generate database tables by executing Alembic migrations:
+Execute Alembic migrations to generate database tables:
 ```bash
 alembic upgrade head
 ```
 
 ### 4. Seed Database
-Ingest satellite and space debris data from Celestrak (or synthetic fallbacks if Celestrak is down):
+Ingest satellite and space debris data from CelesTrak (or synthetic fallback arrays):
 ```bash
-# Seed standard satellite payloads and synthetic structures
+# Seed payload satellites
 python seed.py
 
-# Optional: Seed extra debris records
+# Seed space debris catalog objects
 python seed_debris.py
 ```
 
-### 5. Launch the Server
-Start the Uvicorn ASGI backend server:
+### 5. Launch the ASGI Server
+Start the Uvicorn application server:
 ```bash
 python app.py
 ```
-By default, the server runs on `http://localhost:8000`.
-
----
-
-## 🐋 Development with Docker Compose
-
-To quickly spin up a database, Redis, and backend container:
-```bash
-# Production setup
-docker compose up -d
-
-# Development setup with live reload and local volume mapping
-docker compose -f docker-compose.dev.yml up
-```
+*The server runs on `http://localhost:8000`. Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.*
 
 ---
 
@@ -110,61 +99,87 @@ docker compose -f docker-compose.dev.yml up
 
 ### 🌐 HTTP REST Endpoints
 
-| Method | Path | Description | Query Parameters |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Status details of DB and Redis connections. | None |
-| `GET` | `/api/stats` | Global stats: count of satellites, debris objects, and active conjunction risk counts. | None |
-| `GET` | `/api/satellites` | Retrieves paginated list of satellites. | `limit` (int, default=500), `offset` (int, default=0), `object_type` (string) |
-| `GET` | `/api/satellites/search` | Full-text query on satellite names or NORAD IDs. | `q` (string, required), `limit` (int) |
-| `GET` | `/api/satellites/{norad_id}` | Fetch individual satellite details (adds orbital properties, country, launch date). | None |
-| `GET` | `/api/propagate/{norad_id}` | Calculates real-time latitude, longitude, and velocity vectors. | `at` (datetime string, optional) |
-| `GET` | `/api/conjunctions` | Query calculated proximity warnings. | `risk_level` (string), `hours_ahead` (int, default=72), `limit` (int) |
-| `DELETE` | `/api/conjunctions/clear` | Clear conjunction alerts older than 24 hours. | None |
+| Method | Route | Description | Query Parameters | Response Model |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/ping` | Instant liveness check (no DB/Redis dependency) | None | `{ "status": "ok" }` |
+| `GET` | `/health` | In-depth DB & Redis connectivity health status | None | `{ status, db, redis, timestamp }` |
+| `GET` | `/api/stats` | Catalog metrics, conjunction counts & scan timestamp | None | Aggregated stats JSON |
+| `GET` | `/api/satellites` | Retrieves paginated list of satellites | `limit` (default=500), `offset`, `object_type` | `List[SatelliteResponse]` |
+| `GET` | `/api/satellites/search` | Search satellites by name or NORAD ID | `q` (min_length=1), `limit` (default=20) | `List[SatelliteResponse]` |
+| `GET` | `/api/satellites/{norad_id}` | Details for a single satellite (adds country, launch date, orbital props) | None | `SatelliteResponse` |
+| `GET` | `/api/propagate/{norad_id}` | Propagate satellite to a specific UTC datetime | `at` (ISO datetime string, optional) | `PositionResponse` |
+| `GET` | `/api/conjunctions` | Retrieves list of computed proximity warnings | `risk_level`, `hours_ahead` (default=72), `limit` | `List[ConjunctionResponse]` |
+| `GET` | `/api/conjunctions/{id}` | Retrieve single conjunction event details | None | `ConjunctionResponse` |
+| `DELETE` | `/api/conjunctions/clear` | Purge conjunction records older than 24 hours | None | `{ "deleted": int }` |
+| `POST` | `/api/refresh` | Trigger background conjunction rescan & position broadcast | None | `{ success, message, timestamp }` |
+
+---
 
 ### 🔌 Socket.IO Events
 
-#### Client to Server (Subscribe)
-*   `connect`: Initiates connection. Server responds with a `connected` status.
-*   `subscribe_satellites`: Client subscribes to receiving coordinates. Takes format:
+#### Client to Server (Incoming)
+*   `connect`: Initiates handshake. Server responds with `connected` event.
+*   `subscribe_satellites`: Subscribes client to specific NORAD objects. Payload:
     ```json
-    { "norad_ids": ["25544", "48274"] }
+    { "norad_ids": ["25544", "49044"] }
     ```
+    *Server acknowledges with `subscription_updated` event.*
 
-#### Server to Client (Publish)
-*   `connected`: Emitted immediately upon connection success:
+#### Server to Client (Outgoing)
+*   `connected`: Emitted upon successful handshake:
     ```json
     { "status": "ok" }
     ```
-*   `satellite_positions`: Broadcasts list of computed satellite locations every 60 seconds to all connected clients:
+*   `satellite_positions`: Broadcasts propagated satellite coordinates every **5 seconds**:
     ```json
     [
       {
         "norad_id": "25544",
         "name": "ISS (ZARYA)",
-        "latitude": -51.64,
-        "longitude": 104.82,
-        "altitude_km": 421.25,
+        "lat": -12.3456,
+        "lon": 45.6789,
+        "alt": 421.34,
+        "latitude": -12.3456,
+        "longitude": 45.6789,
+        "altitude_km": 421.34,
         "velocity_kms": 7.66,
-        "timestamp": "2026-06-11T18:42:00Z",
+        "timestamp": "2026-07-20T11:20:00Z",
+        "type": "payload",
         "object_type": "payload"
       }
     ]
     ```
-*   `new_alert`: Broadcasts newly scanned high-risk conjunction events. Receives instant pushes when the Conjunction Engine finds proximity concerns:
+*   `new_alert`: Broadcasts newly scanned high-risk conjunction events:
     ```json
     {
-      "id": 104,
+      "id": 14,
       "sat1_norad_id": "25544",
       "sat1_name": "ISS (ZARYA)",
-      "sat2_norad_id": "90014",
-      "sat2_name": "SYNTHETIC DEBRIS 14",
-      "approach_time": "2026-06-12T04:23:00Z",
-      "miss_distance_km": 1.45,
+      "sat1_type": "payload",
+      "sat2_norad_id": "49044",
+      "sat2_name": "ISS (NAUKA)",
+      "sat2_type": "payload",
+      "approach_time": "2026-07-21T05:22:10Z",
+      "miss_distance_km": 0.027,
       "risk_level": "HIGH",
-      "probability": 0.0024,
-      "relative_velocity": 14.22
+      "probability": 0.732,
+      "relative_velocity": 1.85
     }
     ```
+
+---
+
+## 📋 Environment Variables
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | `sqlite+aiosqlite:///./orbitalwatch.db` | Async database connection string (SQLite / PostgreSQL) |
+| `REDIS_URL` | `redis://localhost:6379/0` | Connection string for Redis / Valkey PubSub |
+| `CORS_ORIGINS` | `["http://localhost:5173"]` | Authorized origin list for CORS |
+| `TLE_UPDATE_INTERVAL_HOURS` | `24` | Refresh frequency for CelesTrak catalog elements |
+| `HOST` | `0.0.0.0` | ASGI bind IP address |
+| `PORT` | `8000` | ASGI server port |
+| `RELOAD` | `false` | Enable Uvicorn hot reloading |
 
 ---
 
@@ -175,7 +190,7 @@ Run the test suite using `pytest`:
 pytest
 ```
 
-To run the end-to-end local integration checklist (verifies REST routing and real-time Socket.IO subscriptions):
+Run the end-to-end integration checklist (validates REST endpoints and real-time Socket.IO subscriptions):
 ```bash
 python verify_backend.py
 ```

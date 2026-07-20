@@ -182,20 +182,35 @@ code {
 #main-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;          /* full viewport, not min-height */
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  width: 100%;
   overflow: hidden;
 }
 
 #main-header {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
   flex-shrink: 0;
-  height: var(--header-height);
+  height: auto;
+  min-height: var(--header-height);
+  width: 100%;
 }
 
 #main-content {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 0;          /* allow flex child to shrink below content size */
+  width: 100%;
+  height: 100%;
+  padding-top: var(--header-height);
+  box-sizing: border-box;
+  min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -203,22 +218,33 @@ code {
   display: flex;
   flex-direction: column;
   flex: 1;
+  width: 100%;
+  height: 100%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 #globe-workspace {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  min-height: 0;
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* The Three.js canvas wrapper */
+/* The Three.js canvas wrapper: flex-1 fills exact available height and width */
 .globe-container {
   position: relative;
-  width: 100vw;
-  height: calc(100vh - 112px);
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -235,25 +261,43 @@ code {
 /* Stats bar: fixed height, never shrinks */
 #stats-cards {
   flex-shrink: 0;
+  width: 100%;
 }
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 768px) {
-  body {
-    overflow: auto;         /* allow body scroll on mobile */
+  html, body {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
+
   #main-layout {
-    height: auto;
-    min-height: 100vh;
+    height: auto !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
+
   #main-content {
-    overflow: auto;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: calc(100vh - var(--header-height)) !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    padding-bottom: 72px !important;
   }
+
   .globe-container {
-    height: calc(100svh - var(--header-height) - 76px - 64px);
-    min-height: 260px;
-    flex: none;             /* explicit height on mobile */
+    height: 45vh !important;
+    min-height: 280px !important;
+    flex: none !important;
   }
+
   /* Responsive flexbox wrap for stats bar */
   #stats-cards {
     display: flex !important;
@@ -266,17 +310,26 @@ code {
     border-bottom: 1px solid #1a1a2e;
     padding: 0.5rem 0.25rem !important;
   }
-  /* Hide floating filter panel on mobile — use header nav instead */
+  /* Floating filter panel display on mobile */
   #floating-filter-panel {
-    display: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
   }
   #left-control-deck {
-    left: 12px !important;
-    right: 12px !important;
-    width: calc(100% - 24px) !important;
-    max-height: 35vh !important;
-    bottom: 76px !important;
-    top: auto !important;
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    width: 100% !important;
+    max-width: 480px !important;
+    margin: 0 auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+    pointer-events: auto !important;
+    padding: 12px 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
   }
   #selected-satellite-charts {
     display: none !important;
@@ -466,10 +519,26 @@ input::placeholder {
 
 .toast-enter {
   animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 2147483647 !important;
 }
 
 .toast-exit {
   animation: toast-slide-out 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 2147483647 !important;
+}
+
+@media (max-width: 768px) {
+  .toast-enter,
+  .toast-exit,
+  [role="alert"] {
+    top: 12px !important;
+    right: 12px !important;
+    left: 12px !important;
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    margin: 0 auto !important;
+    z-index: 2147483647 !important;
+  }
 }
 
 /* ── Demo Mode Animations ─────────────────────────────────── */
@@ -557,9 +626,20 @@ input::placeholder {
   }
 }
 
-/* ── Header Responsive Adjustments ──────────────────────── */
+/* ── Header Responsive Adjustments & Fluid Heading Typography ── */
 #main-header {
   transition: padding var(--transition-fast), gap var(--transition-fast) !important;
+}
+
+.logo-title {
+  font-size: clamp(0.85rem, 1.4vw, 1.0625rem) !important;
+  transition: font-size var(--transition-fast) !important;
+}
+
+.nav-item-btn {
+  font-size: clamp(0.72rem, 1vw, 0.8125rem) !important;
+  padding: 0.35rem clamp(0.4rem, 0.8vw, 0.75rem) !important;
+  transition: font-size var(--transition-fast), padding var(--transition-fast) !important;
 }
 
 .header-nav {
@@ -568,6 +648,37 @@ input::placeholder {
 
 .header-right-actions {
   transition: gap var(--transition-fast) !important;
+}
+
+@media (max-width: 1024px) {
+  #main-header {
+    padding: 0 1rem !important;
+    gap: 0.75rem !important;
+  }
+  .logo-title {
+    font-size: 0.95rem !important;
+  }
+  .nav-item-btn {
+    font-size: 0.75rem !important;
+    padding: 0.3rem 0.5rem !important;
+  }
+  .header-search-container {
+    max-width: 260px !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .logo-title {
+    font-size: 0.88rem !important;
+  }
+  .nav-item-btn {
+    font-size: 0.72rem !important;
+    padding: 0.25rem 0.38rem !important;
+    gap: 0.25rem !important;
+  }
+  .header-search-container {
+    max-width: 200px !important;
+  }
 }
 
 @media (max-width: 768px) {
@@ -586,6 +697,9 @@ input::placeholder {
 @media (max-width: 480px) {
   .header-right-actions {
     gap: 0.35rem !important;
+  }
+  .logo-title {
+    font-size: 0.82rem !important;
   }
 }
 
@@ -651,6 +765,7 @@ input::placeholder {
   #main-content {
     overflow: visible !important;
     height: auto !important;
+    padding-top: var(--header-height) !important;
   }
   #globe-dashboard {
     display: flex !important;
@@ -703,6 +818,38 @@ input::placeholder {
     padding: 0 16px 24px 16px !important;
     gap: 12px !important;
   }
+  #launch-simulator-panel {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    right: auto !important;
+    width: calc(100% - 24px) !important;
+    max-width: 480px !important;
+    margin: 12px auto !important;
+    max-height: calc(100vh - var(--header-height) - 80px) !important;
+    height: auto !important;
+    z-index: 40 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+#launch-simulator-panel input,
+#launch-simulator-panel select,
+#launch-simulator-panel button {
+  box-sizing: border-box !important;
+  max-width: 100% !important;
+}
+  #alerts-view {
+    height: auto !important;
+    min-height: calc(100vh - var(--header-height)) !important;
+    overflow-y: visible !important;
+    padding-bottom: 80px !important;
+  }
+  #alert-panel {
+    height: auto !important;
+    max-height: none !important;
+  }
   #alert-detail-panel {
     top: auto !important;
     bottom: 0 !important;
@@ -711,6 +858,8 @@ input::placeholder {
     width: 100% !important;
     height: auto !important;
     max-height: 80vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
     border-left: none !important;
     border-top: 3px solid var(--risk-border-color, #1a1a2e) !important;
     border-radius: 16px 16px 0 0 !important;
