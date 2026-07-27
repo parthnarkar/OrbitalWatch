@@ -28,7 +28,6 @@ sio = socketio.AsyncServer(
     async_handlers=True,
 )
 
-
 last_broadcast_positions: list[dict[str, object]] = []
 
 # Set to True by rescan endpoint so next loop iteration broadcasts immediately
@@ -50,7 +49,11 @@ async def disconnect(sid: str) -> None:
 
 @sio.on("subscribe_satellites")
 async def subscribe_satellites(sid: str, data: dict | None = None) -> None:
-    await sio.emit("subscription_updated", {"status": "ok", "norad_ids": (data or {}).get("norad_ids", [])}, to=sid)
+    await sio.emit(
+        "subscription_updated",
+        {"status": "ok", "norad_ids": (data or {}).get("norad_ids", [])},
+        to=sid,
+    )
     if last_broadcast_positions:
         await sio.emit("satellite_positions", last_broadcast_positions, to=sid)
 
@@ -77,37 +80,44 @@ def _position_payload(satellite: SatelliteModel) -> dict[str, object] | None:
 
 async def broadcast_positions() -> None:
     """Broadcast propagated satellite positions every 5 seconds.
-    
-    Wakes up immediately when trigger_immediate_broadcast() is called,
-    so a rescan is reflected on the globe within ~1 second.
+
+    Optimisation: skips the DB query and CPU-heavy propagation entirely when
+    no WebSocket clients are connected. This prevents constant CPU usage on
+    Render free-tier when no one is using the app.
+
+    Wakes up immediately when trigger_immediate_broadcast() is called.
     """
     global last_broadcast_positions
     while True:
         try:
-            async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(SatelliteModel).order_by(SatelliteModel.norad_id).limit(500)
-                )
-                satellites = list(result.scalars().all())
+            active_clients = manager.get_active_connections()
 
-            data = []
-            for idx, satellite in enumerate(satellites):
-                if idx % 50 == 0:
-                    await asyncio.sleep(0)  # Yield control to prevent event loop starvation
-                payload = _position_payload(satellite)
-                if payload is not None:
-                    data.append(payload)
+            if active_clients:
+                # Only query DB and propagate when clients are actually connected
+                async with AsyncSessionLocal() as session:
+                    result = await session.execute(
+                        select(SatelliteModel).order_by(SatelliteModel.norad_id).limit(500)
+                    )
+                    satellites = list(result.scalars().all())
 
-            last_broadcast_positions = data
-            if manager.get_active_connections():
+                data = []
+                for idx, satellite in enumerate(satellites):
+                    if idx % 50 == 0:
+                        await asyncio.sleep(0)  # yield to prevent event loop starvation
+                    payload = _position_payload(satellite)
+                    if payload is not None:
+                        data.append(payload)
+
+                last_broadcast_positions = data
                 await sio.emit("satellite_positions", data)
+
         except asyncio.CancelledError:
             logger.info("Position broadcast task cancelled")
             break
         except Exception:
             logger.exception("Position broadcast failed")
 
-        # Wait 5 s OR wake up early if rescan triggered an immediate broadcast
+        # Wait 5s OR wake up early if rescan triggered an immediate broadcast
         _broadcast_now.clear()
         try:
             await asyncio.wait_for(_broadcast_now.wait(), timeout=5.0)
@@ -121,12 +131,17 @@ def trigger_immediate_broadcast() -> None:
 
 
 async def listen_for_alerts(redis: Redis | None) -> None:
-    try:
-        if redis is None:
-            while True:
-                await asyncio.sleep(10)
-            return
+    """Listen for Redis pub/sub alert messages and forward to Socket.IO clients.
 
+    If Redis is unavailable, returns immediately — the scheduler handles
+    direct sio.emit() in the Redis-absent code path already.
+    """
+    if redis is None:
+        # No Redis — alerts are emitted directly by the scheduler; nothing to do here.
+        logger.info("Redis not configured; alert listener exiting (scheduler will emit directly).")
+        return
+
+    try:
         pubsub = redis.pubsub()
         await pubsub.subscribe("new_alerts")
         async for message in pubsub.listen():
@@ -143,8 +158,7 @@ async def listen_for_alerts(redis: Redis | None) -> None:
     except Exception:
         logger.exception("Redis alert listener failed")
     finally:
-        if redis is not None:
-            try:
-                await pubsub.close()
-            except Exception:
-                pass
+        try:
+            await pubsub.close()
+        except Exception:
+            pass

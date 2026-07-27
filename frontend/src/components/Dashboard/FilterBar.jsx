@@ -111,11 +111,13 @@ export function FilterBar({ filters, onChange }) {
 
       {/* Altitude Range Inputs */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--space-text-muted, #8888aa)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span id="label-altitude-range" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--space-text-muted, #8888aa)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Altitude (km):
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <input
+            id="filter-min-altitude"
+            name="minAltitude"
             type="number"
             min={0}
             max={40000}
@@ -123,6 +125,7 @@ export function FilterBar({ filters, onChange }) {
             value={minAltitude}
             onChange={(e) => handleAltitudeChange('minAltitude', e.target.value)}
             placeholder="Min"
+            aria-labelledby="label-altitude-range"
             aria-label="Minimum altitude in kilometers"
             style={{
               width: '80px',
@@ -138,6 +141,8 @@ export function FilterBar({ filters, onChange }) {
           />
           <span style={{ fontSize: '0.75rem', color: 'var(--space-text-dim, #555577)' }}>to</span>
           <input
+            id="filter-max-altitude"
+            name="maxAltitude"
             type="number"
             min={0}
             max={40000}
@@ -145,6 +150,7 @@ export function FilterBar({ filters, onChange }) {
             value={maxAltitude}
             onChange={(e) => handleAltitudeChange('maxAltitude', e.target.value)}
             placeholder="Max"
+            aria-labelledby="label-altitude-range"
             aria-label="Maximum altitude in kilometers"
             style={{
               width: '80px',

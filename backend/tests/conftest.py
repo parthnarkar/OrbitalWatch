@@ -17,6 +17,12 @@ async def setup_test_db():
     # Clean up connections
     await engine.dispose()
 
+@pytest_asyncio.fixture
+async def db_session():
+    from app.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as session:
+        yield session
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_test_db():
     yield
@@ -27,3 +33,4 @@ def cleanup_test_db():
             os.remove(test_db_path)
         except Exception:
             pass
+

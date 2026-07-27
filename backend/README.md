@@ -76,15 +76,12 @@ Execute Alembic migrations to generate database tables:
 alembic upgrade head
 ```
 
-### 4. Seed Database
-Ingest satellite and space debris data from CelesTrak (or synthetic fallback arrays):
-```bash
-# Seed payload satellites
-python seed.py
+### 4. Automatic Database Ingestion
+No manual database seeding is required. When you start the ASGI server for the first time, a background task automatically connects to CelesTrak and fetches TLE orbital data across the configured categories:
+* **Active Payloads**: `weather`, `gps-ops`, `amateur`, `visual`, `stations`, `geo`
+* **Debris Categories**: `iridium-33-debris`, `cosmos-2251-debris`, `fengyun-1c-debris`, `cosmos-1408-debris`
 
-# Seed space debris catalog objects
-python seed_debris.py
-```
+If the database is empty, the first conjunction scan will execute immediately after this ingestion completes.
 
 ### 5. Launch the ASGI Server
 Start the Uvicorn application server:

@@ -356,11 +356,9 @@ FloatingFilterPanel.propTypes = {
   setLegendOpen:   PropTypes.func.isRequired,
 }
 
-FloatingFilterPanel.defaultProps = { stats: null }
-
 // ── Top-Right Camera Controls ─────────────────────────────────────────────────
 
-function CameraControls({ onReset, onRefresh }) {
+function CameraControls({ onReset, onRefresh = null }) {
   return (
     <div
       style={{
@@ -422,14 +420,13 @@ CameraControls.propTypes = {
   onRefresh: PropTypes.func,
 }
 
-CameraControls.defaultProps = { onRefresh: null }
 
 // ── GlobeView ─────────────────────────────────────────────────────────────────
 
 /**
  * Full-screen globe view with floating panels.
  */
-function GlobeView({ onResetAll, onRefresh, controlsRef, stats, satellites }) {
+function GlobeView({ onResetAll, onRefresh = null, controlsRef, stats = null, satellites }) {
   const {
     filteredSatellites,
     filters,
@@ -716,7 +713,6 @@ GlobeView.propTypes = {
   satellites:    PropTypes.array.isRequired,
 }
 
-GlobeView.defaultProps = { onRefresh: null }
 
 // ── AlertsView ────────────────────────────────────────────────────────────────
 
@@ -884,9 +880,11 @@ function AppInner() {
   useEffect(() => {
     let cancelled = false
     async function boot() {
+      // In local dev (relative VITE_API_URL), use fewer attempts with shorter interval
+      const isLocalDev = !import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL.startsWith('/')
       const ready = await wakeUpBackend({
-        maxAttempts: 20,
-        intervalMs: 4_000,
+        maxAttempts: isLocalDev ? 5 : 20,
+        intervalMs: isLocalDev ? 2_000 : 4_000,
         onAttempt: (n) => { if (!cancelled) setWakeAttempt(n) },
       })
       if (cancelled) return
@@ -902,33 +900,47 @@ function AppInner() {
     }
     boot()
     return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [setConjunctions])
 
   // Re-fetch and sync data once WebSocket connection is established
+  // Debounced: only re-fetch if satellites list is empty or stale (avoids WS flap hammering)
   useEffect(() => {
-    if (connected) {
+    if (!connected) return
+    if (satellites.length > 0) {
+      // Satellites already loaded — just refresh stats and conjunctions
       fetchStats()
         .then(setStats)
         .catch((e) => console.error('[App] sync fetchStats error:', e))
       fetchConjunctions()
         .then((data) => setConjunctions(Array.isArray(data) ? data : []))
         .catch((e) => console.error('[App] sync fetchConjunctions error:', e))
+    } else {
+      // Initial load: also fetch satellites
       refetchSatellites()
+      fetchStats()
+        .then(setStats)
+        .catch((e) => console.error('[App] sync fetchStats error:', e))
+      fetchConjunctions()
+        .then((data) => setConjunctions(Array.isArray(data) ? data : []))
+        .catch((e) => console.error('[App] sync fetchConjunctions error:', e))
     }
-  }, [connected, refetchSatellites, setConjunctions])
+  }, [connected, satellites.length, refetchSatellites, setConjunctions])
 
   // Listen for background conjunction recalculation completion event from WebSocket
   useEffect(() => {
     const handler = () => {
-      console.log('[App] Re-fetching conjunctions after background scan update')
+      console.log('[App] Re-fetching all telemetry data after background scan update')
+      refetchSatellites()
+      fetchStats()
+        .then(setStats)
+        .catch((e) => console.error('[App] background update fetchStats error:', e))
       fetchConjunctions()
         .then((data) => setConjunctions(Array.isArray(data) ? data : []))
         .catch((e) => console.error('[App] background update fetchConjunctions error:', e))
     }
     window.addEventListener('ow:conjunctions-updated', handler)
     return () => window.removeEventListener('ow:conjunctions-updated', handler)
-  }, [setConjunctions])
+  }, [refetchSatellites, setConjunctions])
 
 
 
