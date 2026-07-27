@@ -3,7 +3,7 @@ services:
     name: orbitalwatch-api
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: bash start.sh
+    startCommand: python app.py
     plan: starter
     healthCheckPath: /health
     envVars:
@@ -14,7 +14,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.10"
       - key: CORS_ORIGINS
-        value: '["https://orbital-watch-bay.vercel.app","https://orbitalwatch-backend.onrender.com"]'
+        value: ["*"]
       - key: WEB_CONCURRENCY
         value: "1"
       - key: ENVIRONMENT
