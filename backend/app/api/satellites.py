@@ -4,7 +4,7 @@ import asyncio
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -15,47 +15,74 @@ from app.services.propagation import propagate_satellite
 router = APIRouter(prefix="/api/satellites", tags=["satellites"])
 
 
-def populate_satellite_extra_fields(satellite: SatelliteModel) -> dict[str, object]:
-    pos = propagate_satellite(satellite)
-    
-    # 1. Parse inclination from TLE Line 2
+def _determine_country(name: str) -> str:
+    """Best-effort country determination from satellite name.
+
+    Returns ISO country code or descriptive string.
+    Falls back to "Unknown" rather than incorrectly defaulting to "US".
+    """
+    name_upper = name.upper()
+    if any(k in name_upper for k in ("QIANFAN", "CZ-", "TIANGONG", "ZHUQUE", "LIJIAN",
+                                      "FENGYUN", "SHIJIAN", "CHINASAT", "TIANLIAN",
+                                      "BEIDOU", "QZS")):
+        return "CN"
+    if any(k in name_upper for k in ("COSMOS", "SL-", "RESURS", "GLONASS", "ELEKTRO",
+                                      "MOLNIYA", "SPEKTR")):
+        return "RU"
+    if "ONEWEB" in name_upper:
+        return "GB"
+    if "ISS" in name_upper or "ZARYA" in name_upper or "ZVEZDA" in name_upper:
+        return "US/RU/ESA/JP"
+    if "INTELSAT" in name_upper:
+        return "LU"
+    if any(k in name_upper for k in ("STARLINK", "GPS", "NAVSTAR", "GOES",
+                                      "LANDSAT", "NOAA", "TERRA", "AQUA")):
+        return "US"
+    if any(k in name_upper for k in ("SENTINEL", "ENVISAT", "METEOSAT", "MSG",
+                                      "SPOT", "ASTRIUM", "PLEIADES")):
+        return "EU"
+    if any(k in name_upper for k in ("ALOS", "HIMAWARI", "DAICHI", "MICHIBIKI")):
+        return "JP"
+    if any(k in name_upper for k in ("CARTOSAT", "RESOURCESAT", "IRNSS", "GSAT")):
+        return "IN"
+    if "ARABSAT" in name_upper:
+        return "SA"
+    # Default to Unknown rather than incorrectly asserting US
+    return "Unknown"
+
+
+def _extract_launch_year(tle_line1: str | None) -> str:
+    """Extract the launch year from TLE Line 1 epoch field (columns 19-20).
+
+    Returns a YYYY-01-01 string. The TLE epoch encodes only year+day — full
+    launch date is not available from TLE data alone.
+    """
+    try:
+        if not tle_line1:
+            return "Unknown"
+        year_str = tle_line1[18:20].strip()
+        if year_str.isdigit():
+            year = int(year_str)
+            full_year = 1900 + year if year >= 57 else 2000 + year
+            return f"{full_year}-01-01"
+    except Exception:
+        pass
+    return "Unknown"
+
+
+async def _populate_satellite_fields(satellite: SatelliteModel) -> dict[str, object]:
+    """Populate extended satellite fields including a propagated position.
+
+    Propagation runs in a thread pool so it does not block the event loop.
+    """
+    pos = await asyncio.to_thread(propagate_satellite, satellite)
+
+    # Parse inclination from TLE Line 2 (columns 8-16)
     try:
         inc = float(satellite.tle_line2[8:16].strip())
     except Exception:
         inc = 0.0
-        
-    # 2. Extract launch year and day from TLE Line 1
-    try:
-        year_str = satellite.tle_line1[9:11].strip()
-        if year_str.isdigit():
-            year = int(year_str)
-            full_year = 1900 + year if year >= 57 else 2000 + year
-            launch_date = f"{full_year}-01-01"
-        else:
-            launch_date = "2023-01-01"
-    except Exception:
-        launch_date = "2023-01-01"
-        
-    # 3. Determine country of origin
-    country = "US"
-    name_upper = satellite.name.upper()
-    if any(k in name_upper for k in ("QIANFAN", "CZ-", "TIANGONG", "ZHUQUE", "LIJIAN")):
-        country = "CN"
-    elif any(k in name_upper for k in ("COSMOS", "SOYUZ", "FREGAT")):
-        country = "RU"
-    elif "ONEWEB" in name_upper:
-        country = "GB"
-    elif "ISS" in name_upper:
-        country = "US/RU/ESA/JP"
-    elif "INTELSAT" in name_upper:
-        country = "LU"
-    elif "ESTUBE" in name_upper:
-        country = "FR"
-    elif "STARLINK" in name_upper:
-        country = "US"
-    elif "GPS" in name_upper:
-        country = "US"
-        
+
     return {
         "id": satellite.id,
         "norad_id": satellite.norad_id,
@@ -68,9 +95,11 @@ def populate_satellite_extra_fields(satellite: SatelliteModel) -> dict[str, obje
         "velocity_kms": pos["velocity_kms"] if pos else 0.0,
         "orbital_period_min": pos["orbital_period_min"] if pos else 0.0,
         "inclination": inc,
-        "launch_date": launch_date,
-        "country": country,
+        "launch_date": _extract_launch_year(satellite.tle_line1),
+        "country": _determine_country(satellite.name),
     }
+
+
 @router.get("", response_model=list[SatelliteResponse])
 @router.get("/", response_model=list[SatelliteResponse], include_in_schema=False)
 async def list_satellites(
@@ -84,7 +113,8 @@ async def list_satellites(
         stmt = stmt.where(SatelliteModel.object_type == object_type)
     result = await db.execute(stmt)
     satellites = list(result.scalars().all())
-    return [populate_satellite_extra_fields(sat) for sat in satellites]
+    # Run all propagations concurrently in thread pool — non-blocking
+    return await asyncio.gather(*[_populate_satellite_fields(sat) for sat in satellites])
 
 
 @router.get("/search", response_model=list[SatelliteResponse])
@@ -102,7 +132,7 @@ async def search_satellites(
     )
     result = await db.execute(stmt)
     satellites = list(result.scalars().all())
-    return [populate_satellite_extra_fields(sat) for sat in satellites]
+    return await asyncio.gather(*[_populate_satellite_fields(sat) for sat in satellites])
 
 
 @router.get("/{norad_id}", response_model=SatelliteResponse)
@@ -114,4 +144,4 @@ async def get_satellite(
     satellite = result.scalar_one_or_none()
     if satellite is None:
         raise HTTPException(status_code=404, detail="Satellite not found")
-    return populate_satellite_extra_fields(satellite)
+    return await _populate_satellite_fields(satellite)

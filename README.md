@@ -331,8 +331,6 @@ OrbitalWatch/
 │   ├── tests/              # Pytest test suite
 │   ├── app.py              # Main ASGI app runner with auto-migrations
 │   ├── requirements.txt    # Python packages
-│   ├── seed.py             # Celestrak satellite catalog seeder
-│   ├── seed_debris.py      # Space debris catalog seeder
 │   └── verify_backend.py   # Automated backend integration test script
 └── frontend/               # React 19 Vite Dashboard Client
     ├── src/
@@ -379,16 +377,11 @@ OrbitalWatch/
    ```bash
    alembic upgrade head
    ```
-6. Ingest initial satellite catalog data:
-   ```bash
-   python seed.py
-   python seed_debris.py
-   ```
-7. Start the FastAPI development server:
+6. Start the FastAPI development server:
    ```bash
    python app.py
    ```
-   *The ASGI server runs at `http://localhost:8000`. Interactive API Docs are available at `http://localhost:8000/docs`.*
+   *The server runs at `http://localhost:8000`. On initial boot, a background task automatically connects to CelesTrak, populates the SQLite/PostgreSQL database with satellite elements (TLES), and performs the initial conjunction scan. Interactive API Docs are available at `http://localhost:8000/docs`.*
 
 ---
 

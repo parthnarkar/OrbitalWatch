@@ -82,11 +82,9 @@ async function withRetry(fn, { attempts = 3, baseDelayMs = 1_500 } = {}) {
 
 api.interceptors.request.use(
   (config) => {
-    // Attach auth token from localStorage if present (future-proofing)
-    const token = localStorage.getItem('ow_token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    // Auth token placeholder — remove the comment and add token logic when auth is implemented
+    // const token = localStorage.getItem('ow_token')
+    // if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => {

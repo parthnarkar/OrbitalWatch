@@ -11,7 +11,7 @@ This guide provides step-by-step instructions for running, testing, and verifyin
 3. [Environment Setup & Configuration](#3-environment-setup--configuration)
 4. [Running the Application End-to-End](#4-running-the-application-end-to-end)
     - [Step 1: Database Migrations](#step-1-database-migrations)
-    - [Step 2: Satellite Data Ingestion & Seeding](#step-2-satellite-data-ingestion--seeding)
+    - [Step 2: Satellite Data Ingestion](#step-2-satellite-data-ingestion)
     - [Step 3: Launching the Backend ASGI Server](#step-3-launching-the-backend-asgi-server)
     - [Step 4: Launching the Frontend Web Client](#step-4-launching-the-frontend-web-client)
 5. **End-to-End Testing Suite**
@@ -19,7 +19,9 @@ This guide provides step-by-step instructions for running, testing, and verifyin
     - [Backend Integration & Verification Script](#backend-integration--verification-script)
     - [Frontend Vitest Unit & Component Suite](#frontend-vitest-unit--component-suite)
     - [Frontend Code Quality & Linting](#frontend-code-quality--linting)
-6. [Troubleshooting & Common Operations](#6-troubleshooting--common-operations)
+6. [Production Deployment & Running Guide](#6-production-deployment--running-guide)
+7. [Production End-to-End Verification](#7-production-end-to-end-verification)
+8. [Troubleshooting & Common Operations](#8-troubleshooting--common-operations)
 
 ---
 
@@ -97,17 +99,13 @@ python -m alembic upgrade head
 
 ---
 
-### Step 2: Satellite Data Ingestion & Seeding
+### Step 2: Satellite Data Ingestion
 
-Populate the local database with real Celestrak TLE records and synthetic orbital categories:
+No manual database seeding is required. When you start the ASGI server (Step 3), a background task automatically connects to CelesTrak and fetches TLE orbital data across the configured categories:
+* **Active Payloads**: `weather`, `gps-ops`, `amateur`, `visual`, `stations`, `geo`
+* **Debris Categories**: `iridium-33-debris`, `cosmos-2251-debris`, `fengyun-1c-debris`, `cosmos-1408-debris`
 
-```bash
-python seed.py
-python seed_debris.py
-```
-
-- `seed.py`: Fetches active satellites, space stations, visual objects, GEO satellites, and space debris from CelesTrak GP API.
-- `seed_debris.py`: Ensures at least 25 satellites per category (`payload`, `debris`, `rocket body`, `unknown`) are populated for balanced tracking.
+If the database is empty, the first conjunction scan will execute immediately after this initial ingestion completes.
 
 ---
 
@@ -222,7 +220,60 @@ npm run lint
 
 ---
 
-## 6. Troubleshooting & Common Operations
+## 6. Production Deployment & Running Guide
+
+### Backend Production Deployment (e.g., Render, Railway, or VPS)
+To deploy the backend to a production environment:
+1. **Database Service**: Spin up a managed PostgreSQL database.
+2. **Redis Service**: Set up a managed Redis/Valkey instance (highly recommended for production concurrency to support distributed alert pub/sub).
+3. **ASGI Server Command**: Run the production ASGI server with `gunicorn` (for multi-worker clustering and scaling) using the Uvicorn worker class:
+   ```bash
+   gunicorn -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000 app.main:socket_app
+   ```
+4. **Environment Variables**: Define the following variables in your hosting environment:
+   - `DATABASE_URL`: Connection URI for your PostgreSQL database (must use the `postgresql+asyncpg` driver, e.g., `postgresql+asyncpg://user:pass@host:port/dbname`).
+   - `REDIS_URL`: Redis instance connection URI (e.g., `redis://user:pass@host:6379/0`).
+   - `CORS_ORIGINS`: JSON list of allowed production frontend domains (e.g., `["https://orbitalwatch.vercel.app"]`).
+   - `TLE_UPDATE_INTERVAL_HOURS`: Set to `24` (or any custom update window).
+   - `HOST`: `0.0.0.0`
+   - `PORT`: `8000`
+
+### Frontend Production Deployment (e.g., Vercel, Netlify, or AWS S3)
+To compile and deploy the static React application:
+1. **Environment Variables**: Define the following build-time environment variables:
+   - `VITE_API_URL`: The production backend API endpoint URL (e.g., `https://api.orbitalwatch.com/api`).
+   - `VITE_WS_URL`: The production Socket.IO WebSocket base URL (e.g., `https://api.orbitalwatch.com`).
+2. **Build the Bundle**:
+   ```bash
+   cd frontend
+   npm run build
+   ```
+   This compiles and optimizes your React assets into the `dist/` directory.
+3. **Static File Hosting**: Upload the contents of `dist/` to your static host.
+   - For **Vercel** or **Netlify**, use the `vercel.json` rewrites configuration (already included in the frontend folder) to route all paths cleanly to `index.html` to allow client-side React routing to function.
+
+---
+
+## 7. Production End-to-End Verification
+
+To verify that your production deployment is fully functional:
+
+### 1. Automated API & WebSocket Verification
+You can run the backend verification script against your live production server from any local machine by overriding the `BASE_URL` environment variable:
+```bash
+cd backend
+BASE_URL=https://api.orbitalwatch.com python verify_backend.py
+```
+This script will test production HTTP endpoints (`/health`, `/api/satellites`, etc.) and establish a live WSS (Secure WebSocket) connection to verify Socket.IO functionality on the production domain.
+
+### 2. Manual SSL and WebSocket Verification
+Open your browser developer tools (F12) on the production site:
+- **Network Tab (WS)**: Look for connection requests to `/socket.io/?EIO=4&transport=websocket`. Verify that the connection protocol is `wss://` (Secure WebSocket) and that it successfully upgrades (HTTP status code `101 Switching Protocols`).
+- **CORS Violations**: Check the Console for any CORS warnings. If you see CORS errors, double-check that your production frontend URL is included in the backend's `CORS_ORIGINS` environment list.
+
+---
+
+## 8. Troubleshooting & Common Operations
 
 ### Port Conflicts
 - If port `8000` is already in use, set a custom port before launching:
@@ -238,8 +289,9 @@ To wipe and re-seed the local SQLite database from scratch:
 cd backend
 rm orbitalwatch.db
 python -m alembic upgrade head
-python seed.py
+python app.py
 ```
+*Note: Starting `app.py` after a database wipe will automatically trigger a fresh CelesTrak elements load and conjunction scan.*
 
 ### Running Frontend in Offline / Standalone Mode
 If the backend server is offline or waking up, the frontend automatically uses built-in fallback satellite data (`ISS`, `Hubble`, `Tiangong`, `Starlink`, `NOAA`, `Cosmos`, `Iridium`, `Falcon 9`, `CZ-2D`) so search and visualizers continue working cleanly without breaking.

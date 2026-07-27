@@ -246,8 +246,10 @@ export default function LaunchSimulatorPanel({ satellites }) {
         {/* Name & Launch Site */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Satellite Name</label>
+            <label htmlFor="sim-sat-name" style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Satellite Name</label>
             <input
+              id="sim-sat-name"
+              name="satelliteName"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -265,8 +267,10 @@ export default function LaunchSimulatorPanel({ satellites }) {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Launch Site</label>
+            <label htmlFor="sim-launch-site" style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Launch Site</label>
             <select
+              id="sim-launch-site"
+              name="launchSite"
               value={launchSite}
               onChange={(e) => handleSiteChange(e.target.value)}
               style={{
@@ -297,10 +301,12 @@ export default function LaunchSimulatorPanel({ satellites }) {
           {/* Altitude */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: 4 }}>
-              <span style={{ color: 'var(--space-text-muted)' }}>Target Altitude</span>
+              <label htmlFor="sim-altitude-range" style={{ color: 'var(--space-text-muted)' }}>Target Altitude</label>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--space-cyan)' }}>{altitudeKm} km</span>
             </div>
             <input
+              id="sim-altitude-range"
+              name="altitudeKm"
               type="range"
               min="200"
               max="2000"
@@ -314,10 +320,12 @@ export default function LaunchSimulatorPanel({ satellites }) {
           {/* Inclination */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: 4 }}>
-              <span style={{ color: 'var(--space-text-muted)' }}>Inclination</span>
+              <label htmlFor="sim-inclination-range" style={{ color: 'var(--space-text-muted)' }}>Inclination</label>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--space-cyan)' }}>{inclination}°</span>
             </div>
             <input
+              id="sim-inclination-range"
+              name="inclination"
               type="range"
               min="0"
               max="98"
@@ -337,10 +345,12 @@ export default function LaunchSimulatorPanel({ satellites }) {
           {/* Eccentricity */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', marginBottom: 4 }}>
-              <span style={{ color: 'var(--space-text-muted)' }}>Eccentricity</span>
+              <label htmlFor="sim-eccentricity-range" style={{ color: 'var(--space-text-muted)' }}>Eccentricity</label>
               <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--space-cyan)' }}>{eccentricity}</span>
             </div>
             <input
+              id="sim-eccentricity-range"
+              name="eccentricity"
               type="range"
               min="0.0"
               max="0.1"
@@ -353,8 +363,10 @@ export default function LaunchSimulatorPanel({ satellites }) {
 
           {/* RAAN/LTAN */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>RAAN / LTAN (Optional)</label>
+            <label htmlFor="sim-raan" style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>RAAN / LTAN (Optional)</label>
             <input
+              id="sim-raan"
+              name="raan"
               type="number"
               placeholder="Auto-Optimized (Optimal LTAN)"
               value={raan}
@@ -374,11 +386,12 @@ export default function LaunchSimulatorPanel({ satellites }) {
             />
           </div>
 
-          {/* Mass & Duration */}
           <div style={{ display: 'flex', gap: '0.75rem' }}>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.65rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Payload Mass (kg)</label>
+              <label htmlFor="sim-payload-mass" style={{ display: 'block', fontSize: '0.65rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Payload Mass (kg)</label>
               <input
+                id="sim-payload-mass"
+                name="payloadMass"
                 type="number"
                 value={payloadMass}
                 onChange={(e) => setPayloadMass(Number(e.target.value))}
@@ -395,8 +408,10 @@ export default function LaunchSimulatorPanel({ satellites }) {
               />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.65rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Duration (Years)</label>
+              <label htmlFor="sim-duration-years" style={{ display: 'block', fontSize: '0.65rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>Duration (Years)</label>
               <input
+                id="sim-duration-years"
+                name="durationYears"
                 type="number"
                 min="1"
                 max="15"
@@ -418,8 +433,10 @@ export default function LaunchSimulatorPanel({ satellites }) {
 
           {/* Deorbit strategy */}
           <div>
-            <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>De-orbit Strategy</label>
+            <label htmlFor="sim-deorbit-strategy" style={{ display: 'block', fontSize: '0.7rem', color: 'var(--space-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: 4 }}>De-orbit Strategy</label>
             <select
+              id="sim-deorbit-strategy"
+              name="deorbitStrategy"
               value={deorbitStrategy}
               onChange={(e) => setDeorbitStrategy(e.target.value)}
               style={{

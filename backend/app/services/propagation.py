@@ -62,10 +62,21 @@ def propagate_satellite(
         geocentric = earth_satellite.at(t)
         subpoint = geocentric.subpoint()
         velocity = geocentric.velocity.km_per_s
+        position = geocentric.position.km
+
+        if (
+            math.isnan(position[0])
+            or math.isnan(position[1])
+            or math.isnan(position[2])
+            or math.isnan(velocity[0])
+            or math.isnan(velocity[1])
+            or math.isnan(velocity[2])
+        ):
+            return None
+
         speed = math.sqrt(float(velocity[0]) ** 2 + float(velocity[1]) ** 2 + float(velocity[2]) ** 2)
         no_kozai = float(earth_satellite.model.no_kozai)
         orbital_period = (2 * math.pi / no_kozai) if no_kozai else 0.0
-        position = geocentric.position.km
 
         return {
             "latitude": float(subpoint.latitude.degrees),
@@ -80,3 +91,4 @@ def propagate_satellite(
     except Exception:
         logger.exception("Failed to propagate satellite %s", satellite.norad_id)
         return None
+

@@ -81,8 +81,20 @@ export default defineConfig(async () => {
           changeOrigin: true,
           secure: false,
           configure: (proxy) => {
-            proxy.on('error', (err) => {
-              console.log('[Vite Proxy Error] /api:', err.message)
+            // Defer detaching Vite's default handler using process.nextTick
+            process.nextTick(() => {
+              proxy.removeAllListeners('error')
+              proxy.on('error', (err, _req, res) => {
+                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED' && err.code !== 'EPIPE') {
+                  console.log('[Vite Proxy Error] /api:', err.message || err)
+                }
+                if (res && typeof res.writeHead === 'function') {
+                  if (!res.headersSent) {
+                    res.writeHead(502, { 'Content-Type': 'text/plain' })
+                  }
+                  res.end('Bad Gateway')
+                }
+              })
             })
           }
         },
@@ -91,8 +103,20 @@ export default defineConfig(async () => {
           changeOrigin: true,
           secure: false,
           configure: (proxy) => {
-            proxy.on('error', (err) => {
-              console.log('[Vite Proxy Error] /ping:', err.message)
+            // Defer detaching Vite's default handler using process.nextTick
+            process.nextTick(() => {
+              proxy.removeAllListeners('error')
+              proxy.on('error', (err, _req, res) => {
+                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED' && err.code !== 'EPIPE') {
+                  console.log('[Vite Proxy Error] /ping:', err.message || err)
+                }
+                if (res && typeof res.writeHead === 'function') {
+                  if (!res.headersSent) {
+                    res.writeHead(502, { 'Content-Type': 'text/plain' })
+                  }
+                  res.end('Bad Gateway')
+                }
+              })
             })
           }
         },
@@ -102,24 +126,54 @@ export default defineConfig(async () => {
           secure: false,
           ws: true,
           configure: (proxy) => {
-            proxy.on('error', (err, _req, resOrSocket) => {
-              if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED' && err.code !== 'ECONNREFUSED') {
-                console.log('[Vite Proxy Error] /socket.io:', err.message)
-              }
-              if (resOrSocket && typeof resOrSocket.destroy === 'function') {
-                resOrSocket.destroy()
-              }
+            // Remove Vite's default error listener to prevent noisy console logs for aborted/reset sockets.
+            // We defer this with process.nextTick to ensure it runs after Vite has attached its internal handlers.
+            process.nextTick(() => {
+              proxy.removeAllListeners('error')
+              proxy.on('error', (err, _req, resOrSocket) => {
+                if (
+                  err.code !== 'ECONNRESET' &&
+                  err.code !== 'ECONNABORTED' &&
+                  err.code !== 'ECONNREFUSED' &&
+                  err.code !== 'EPIPE'
+                ) {
+                  console.log('[Vite Proxy Error] /socket.io:', err.message)
+                }
+                if (resOrSocket) {
+                  if (typeof resOrSocket.destroy === 'function') {
+                    resOrSocket.destroy()
+                  } else if (typeof resOrSocket.writeHead === 'function') {
+                    if (!resOrSocket.headersSent) {
+                      resOrSocket.writeHead(502, { 'Content-Type': 'text/plain' })
+                    }
+                    resOrSocket.end('Bad Gateway')
+                  }
+                }
+              })
             })
+
             proxy.on('open', (proxySocket) => {
               proxySocket.on('error', (err) => {
-                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+                if (
+                  err.code !== 'ECONNRESET' &&
+                  err.code !== 'ECONNABORTED' &&
+                  err.code !== 'EPIPE'
+                ) {
                   console.log('[Vite Target WS Socket Error]:', err.message)
                 }
               })
             })
+
             proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
+              // Remove Vite's default error listener from the client socket
+              socket.removeAllListeners('error')
+
               socket.on('error', (err) => {
-                if (err.code !== 'ECONNRESET' && err.code !== 'ECONNABORTED') {
+                if (
+                  err.code !== 'ECONNRESET' &&
+                  err.code !== 'ECONNABORTED' &&
+                  err.code !== 'EPIPE'
+                ) {
                   console.log('[Vite Client WS Socket Error]:', err.message)
                 }
               })
