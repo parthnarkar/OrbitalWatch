@@ -52,11 +52,12 @@ def generate_valid_tle(
     ecc_str = f"{ecc_int:07d}"[:7]
     l2_part = (
         f"2 {nid} {inclination:8.4f} {raan:8.4f} {ecc_str} "
-        f"0.0000 0.0000 {mean_motion:11.8f}00001"
+        f"{0.0:8.4f} {0.0:8.4f} {mean_motion:11.8f}00001"
     )
     l2_chk = compute_tle_checksum(l2_part)
     line2 = f"{l2_part}{l2_chk}"
     return line1, line2
+
 
 
 @pytest.mark.asyncio

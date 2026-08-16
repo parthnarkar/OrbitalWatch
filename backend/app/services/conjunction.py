@@ -163,13 +163,8 @@ async def scan_conjunctions(
         if refined_min_dist == math.inf:
             continue
 
-        # Clamp unrealistically small distances (numeric artifact)
-        if refined_min_dist < 0.01:
-            try:
-                seed_val = int(id_a) + int(id_b)
-            except ValueError:
-                seed_val = 12345
-            refined_min_dist = 0.02 + (seed_val % 60) * 0.001
+        # Ensure minimum positive distance (1 meter epsilon)
+        refined_min_dist = max(refined_min_dist, 0.001)
 
         risk_level = risk_from_distance(refined_min_dist)
         if risk_level is None:
@@ -188,12 +183,8 @@ async def scan_conjunctions(
         except Exception:
             relative_velocity = 7.5
 
-        if relative_velocity < 0.1:
-            try:
-                seed_val = int(id_a) + int(id_b)
-            except ValueError:
-                seed_val = 12345
-            relative_velocity = 0.5 + (seed_val % 40) * 0.05
+        relative_velocity = max(relative_velocity, 0.1)
+
 
         # Store approach_time as UTC-naive (consistent with DB schema)
         conjunctions.append(ConjunctionModel(
