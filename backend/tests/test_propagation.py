@@ -24,8 +24,8 @@ def generate_valid_tle(
     inclination: float,
     altitude_km: float,
     eccentricity: float = 0.0001,
+    raan: float = 0.0,
 ) -> tuple[str, str]:
-    import random
     utcnow = datetime.now(timezone.utc)
     RE = 6378.137
     GM = 398600.4418
@@ -43,12 +43,13 @@ def generate_valid_tle(
     ecc_int = int(eccentricity * 10_000_000)
     ecc_str = f"{ecc_int:07d}"[:7]
     l2_part = (
-        f"2 {nid} {inclination:8.4f} 0.0000 {ecc_str} "
-        f"0.0000 0.0000 {mean_motion:11.8f}00001"
+        f"2 {nid} {inclination:8.4f} {raan:8.4f} {ecc_str} "
+        f"{0.0:8.4f} {0.0:8.4f} {mean_motion:11.8f}00001"
     )
     l2_chk = compute_tle_checksum(l2_part)
     line2 = f"{l2_part}{l2_chk}"
     return line1, line2
+
 
 
 def test_iss_propagation_reasonable_orbit() -> None:
